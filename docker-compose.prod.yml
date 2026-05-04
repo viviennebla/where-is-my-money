@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: wimm-backend:latest
+    ports: ["8000:8000"]
+    volumes:
+      - wimm_db_data:/app/data
+      - wimm_uploads:/app/uploads
+    env_file: .env
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    image: wimm-frontend:latest
+    ports: ["80:80"]
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  wimm_db_data:
+  wimm_uploads:

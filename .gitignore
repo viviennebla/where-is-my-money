@@ -1,0 +1,31 @@
+# 环境 & 密钥
+.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# DB & 上传
+*.sqlite3
+uploads/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Session context (may contain secrets)
+.session_context.md
+
+# Docker
+.docker/

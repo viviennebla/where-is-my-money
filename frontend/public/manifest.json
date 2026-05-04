@@ -1,0 +1,10 @@
+{
+  "name": "Where Is My Money",
+  "short_name": "WIMM",
+  "description": "AI-powered personal accounting",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#1e293b",
+  "icons": []
+}
