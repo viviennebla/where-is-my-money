@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Numeric, UUID
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -9,8 +9,8 @@ from app.database import Base
 class Account(Base):
     __tablename__ = "accounts"
 
-    id: Mapped[str] = mapped_column(UUID, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id: Mapped[str] = mapped_column(UUID, ForeignKey("users.id"), nullable=False)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     currency: Mapped[str] = mapped_column(String(10), default="CNY")
     initial_balance: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"))

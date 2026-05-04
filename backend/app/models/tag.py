@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, UniqueConstraint, UUID
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, UniqueConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -8,11 +8,11 @@ from app.database import Base
 class Tag(Base):
     __tablename__ = "tags"
 
-    id: Mapped[str] = mapped_column(UUID, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id: Mapped[str | None] = mapped_column(UUID, ForeignKey("users.id"), nullable=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     emoji: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    parent_id: Mapped[str | None] = mapped_column(UUID, ForeignKey("tags.id"), nullable=True)
+    parent_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("tags.id"), nullable=True)
     is_system_default: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

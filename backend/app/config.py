@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite+aiosqlite:///app/data/wimm.db"
+    DATABASE_URL: str = "sqlite+aiosqlite:////app/data/wimm.db"
     JWT_SECRET_KEY: str = "change-me-in-production"
     JWT_EXPIRE_MINUTES: int = 1440
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/anthropic"

@@ -19,7 +19,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_token(user_id: str) -> str:
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "exp": datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES),
         "iat": datetime.utcnow(),
     }

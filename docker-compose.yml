@@ -4,7 +4,7 @@ services:
     image: wimm-backend:dev
     ports: ["8000:8000"]
     volumes:
-      - ./backend:/app
+      - ${HOST_PROJECT_ROOT:-.}/backend:/app
       - dev_venv:/app/.venv
       - dev_db_data:/app/data
       - dev_uploads:/app/uploads
@@ -20,8 +20,8 @@ services:
     image: wimm-frontend:dev
     ports: ["5173:5173"]
     volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
+      - ${HOST_PROJECT_ROOT:-.}/frontend/src:/app/src
+      - ${HOST_PROJECT_ROOT:-.}/frontend/public:/app/public
       - dev_node_modules:/app/node_modules
     environment:
       - VITE_API_BASE_URL=http://backend:8000/api/v1
