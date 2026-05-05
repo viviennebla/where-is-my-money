@@ -13,3 +13,19 @@ export const TX_TYPE_COLORS: Record<string, string> = {
   transfer: 'text-blue-600',
   refund: 'text-orange-600',
 }
+
+export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  bank_card: '银行卡',
+  software_balance: '软件余额',
+  financial_product: '理财产品',
+  monthly_bill: '月付',
+  installment: '分期账单',
+}
+
+export const ACCOUNT_TYPE_EMOJIS: Record<string, string> = {
+  bank_card: '\u{1F4B3}',
+  software_balance: '\u{1F4F1}',
+  financial_product: '\u{1F4C8}',
+  monthly_bill: '\u{1F4CB}',
+  installment: '\u{1F4E6}',
+}

@@ -4,6 +4,7 @@ from app.models.transaction import Transaction, TransactionType
 from app.models.tag import Tag
 from app.models.transaction_tag import TransactionTag
 from app.models.import_template import ImportTemplate
+from app.models.import_session import ImportSession
 
 __all__ = [
     "User",
@@ -13,4 +14,5 @@ __all__ = [
     "Tag",
     "TransactionTag",
     "ImportTemplate",
+    "ImportSession",
 ]

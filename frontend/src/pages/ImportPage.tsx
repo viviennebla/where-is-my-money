@@ -2,25 +2,37 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import FileUploader from '../components/import/FileUploader'
-import ColumnMappingView from '../components/import/ColumnMappingView'
+import AIParseView from '../components/import/AIParseView'
+import AccountBindingView from '../components/import/AccountBindingView'
 import ImportProgress from '../components/import/ImportProgress'
 
-type Step = 'upload' | 'mapping' | 'execute' | 'done'
+type Step = 'upload' | 'parse' | 'bind-accounts' | 'execute' | 'done'
+
+interface FileData {
+  file_id: string
+  filename: string
+  headers: string[]
+  sample_rows: string[][]
+  header_row_index: number
+  total_rows: number
+}
 
 export default function ImportPage() {
   const [step, setStep] = useState<Step>('upload')
-  const [fileData, setFileData] = useState<{ file_id: string; filename: string; preview: string[][] } | null>(null)
-  const [templateId, setTemplateId] = useState<string | null>(null)
+  const [fileData, setFileData] = useState<FileData | null>(null)
+  const [accountBindings, setAccountBindings] = useState<Record<string, string> | null>(null)
   const [result, setResult] = useState<{ created: number; updated: number; total: number } | null>(null)
   const navigate = useNavigate()
+
+  const stepLabels = ['上传文件', 'AI解析', '账户绑定', '执行导入', '完成']
+  const stepOrder: Step[] = ['upload', 'parse', 'bind-accounts', 'execute', 'done']
 
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4">导入账单</h2>
 
       <div className="flex gap-2 mb-6">
-        {['上传文件', '确认映射', '执行导入', '完成'].map((label, i) => {
-          const stepOrder: Step[] = ['upload', 'mapping', 'execute', 'done']
+        {stepLabels.map((label, i) => {
           const currentIdx = stepOrder.indexOf(step)
           const isActive = i === currentIdx
           const isPast = i < currentIdx
@@ -36,7 +48,7 @@ export default function ImportPage() {
               <span className={`text-sm ${isActive ? 'font-medium text-gray-900' : 'text-gray-400'}`}>
                 {label}
               </span>
-              {i < 3 && <span className="text-gray-300 mx-2">→</span>}
+              {i < 4 && <span className="text-gray-300 mx-2">→</span>}
             </div>
           )
         })}
@@ -46,29 +58,43 @@ export default function ImportPage() {
         <FileUploader
           onUploaded={(data) => {
             setFileData(data)
-            setStep('mapping')
+            setStep('parse')
           }}
         />
       )}
 
-      {step === 'mapping' && fileData && (
-        <ColumnMappingView
+      {step === 'parse' && fileData && (
+        <AIParseView
           fileId={fileData.file_id}
-          preview={fileData.preview}
-          onConfirmed={async (platformName, mapping) => {
-            const res = await api.post('/import/confirm', {
+          headers={fileData.headers}
+          sampleRows={fileData.sample_rows}
+          onConfirmed={async (mapping, platformName) => {
+            await api.post('/import/confirm', {
+              file_id: fileData.file_id,
               platform_name: platformName,
               field_mapping: mapping,
             })
-            setTemplateId(res.data.template_id)
-            setStep('execute')
+            setStep('bind-accounts')
           }}
+          onBack={() => setStep('upload')}
         />
       )}
 
-      {step === 'execute' && templateId && (
+      {step === 'bind-accounts' && fileData && (
+        <AccountBindingView
+          fileId={fileData.file_id}
+          onConfirmed={(bindings) => {
+            setAccountBindings(bindings)
+            setStep('execute')
+          }}
+          onBack={() => setStep('parse')}
+        />
+      )}
+
+      {step === 'execute' && fileData && (
         <ImportProgress
-          templateId={templateId}
+          fileId={fileData.file_id}
+          accountBindings={accountBindings}
           onDone={(r) => {
             setResult(r)
             setStep('done')

@@ -8,14 +8,18 @@ import TransactionFilters from './TransactionFilters'
 import TagEditor from './TagEditor'
 
 export default function TransactionList() {
-  const { type, dateFrom, dateTo } = useFilterStore()
+  const { type, accountId, dateFrom, dateTo, search, sortBy, sortOrder } = useFilterStore()
   const queryClient = useQueryClient()
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
 
   const params: Record<string, string> = {}
   if (type) params.type = type
+  if (accountId) params.account_id = accountId
   if (dateFrom) params.date_from = dateFrom
   if (dateTo) params.date_to = dateTo
+  if (search) params.search = search
+  if (sortBy) params.sort_by = sortBy
+  if (sortOrder) params.sort_order = sortOrder
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['transactions', params],

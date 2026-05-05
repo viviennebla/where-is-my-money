@@ -2,97 +2,122 @@ import io
 import pytest
 from unittest.mock import patch, MagicMock
 
-from app.utils.file_parser import parse_csv_preview, parse_excel_preview, parse_file_preview
+from app.utils.file_parser import find_header_row, parse_file_data, parse_file_preview
 
 
-class TestParseCsvPreview:
-    def test_basic_csv(self):
-        content = "日期,金额,描述\n2024-01-01,100,购物".encode("utf-8")
-        rows = parse_csv_preview(content)
-        assert len(rows) == 2
-        assert rows[0] == ["日期", "金额", "描述"]
-        assert rows[1] == ["2024-01-01", "100", "购物"]
+class TestFindHeaderRow:
+    def test_finds_chinese_header(self):
+        rows = [
+            ["微信支付账单明细"],
+            ["微信昵称：测试"],
+            ["起始时间：2024-01-01"],
+            [],
+            ["交易时间", "交易类型", "交易对方", "金额(元)", "支付方式"],
+            ["2024-01-01", "支出", "商户A", "100.00", "零钱"],
+        ]
+        idx = find_header_row(rows)
+        assert idx == 4
 
-    def test_utf8_bom(self):
-        content = b'\xef\xbb\xbf\xe6\x97\xa5\xe6\x9c\x9f,\xe9\x87\x91\xe9\xa2\x9d\n2024-01-01,100'
-        rows = parse_csv_preview(content)
-        assert rows[0] == ["日期", "金额"]
+    def test_finds_english_header(self):
+        rows = [
+            ["Report"],
+            ["Generated: 2024"],
+            [],
+            ["Date", "Amount", "Description", "Type"],
+            ["2024-01-01", "100", "Shopping", "expense"],
+        ]
+        idx = find_header_row(rows)
+        assert idx == 3
+
+    def test_first_row_when_no_keywords(self):
+        rows = [
+            ["A", "B", "C"],
+            ["1", "2", "3"],
+        ]
+        idx = find_header_row(rows)
+        assert idx == 0
+
+    def test_empty_rows(self):
+        assert find_header_row([]) == 0
+
+
+class TestParseFileData:
+    def test_csv_from_header(self):
+        content = "交易时间,金额,描述\n2024-01-01,100,购物\n2024-01-02,200,餐饮".encode("utf-8")
+        headers, data = parse_file_data("test.csv", content, header_row_index=0)
+        assert headers == ["交易时间", "金额", "描述"]
+        assert len(data) == 2
+        assert data[0] == ["2024-01-01", "100", "购物"]
+
+    def test_csv_skip_metadata_rows(self):
+        content = (
+            "微信支付账单明细\n"
+            "昵称：test\n"
+            "\n"
+            "交易时间,金额,描述\n"
+            "2024-01-01,100,购物"
+        ).encode("utf-8")
+        headers, data = parse_file_data("test.csv", content, header_row_index=3)
+        assert headers == ["交易时间", "金额", "描述"]
+        assert len(data) == 1
 
     def test_row_limit(self):
-        content = "a,b\n1,2\n3,4\n5,6\n7,8\n9,10\n11,12".encode("utf-8")
-        rows = parse_csv_preview(content, row_limit=3)
-        assert len(rows) == 3
+        content = "a,b\n1,2\n3,4\n5,6\n7,8".encode("utf-8")
+        headers, data = parse_file_data("test.csv", content, header_row_index=0, row_limit=2)
+        assert len(data) == 2
 
-    def test_default_row_limit(self):
-        content = "\n".join(["a,b"] + [f"{i},{i*2}" for i in range(10)]).encode("utf-8")
-        rows = parse_csv_preview(content)
-        assert len(rows) == 5
+    def test_empty_file(self):
+        headers, data = parse_file_data("test.csv", b"", header_row_index=0)
+        assert headers == []
+        assert data == []
 
-    def test_empty_csv(self):
-        rows = parse_csv_preview(b"")
-        assert rows == []
-
-
-class TestParseExcelPreview:
     @patch("app.utils.file_parser.load_workbook")
-    def test_basic_excel(self, mock_load):
+    def test_excel_from_header(self, mock_load):
         mock_wb = MagicMock()
         mock_ws = MagicMock()
         mock_ws.iter_rows.return_value = [
-            (1, "支出", 100.0),
-            (2, "收入", 200.0),
+            ("交易时间", "金额"),
+            ("2024-01-01", "100"),
         ]
         mock_wb.active = mock_ws
         mock_load.return_value = mock_wb
 
-        rows = parse_excel_preview(b"fake-xlsx-content")
-        assert len(rows) == 2
-        assert rows[0] == ["1", "支出", "100.0"]
-
-    @patch("app.utils.file_parser.load_workbook")
-    def test_row_limit(self, mock_load):
-        mock_wb = MagicMock()
-        mock_ws = MagicMock()
-        mock_ws.iter_rows.return_value = [(i,) for i in range(10)]
-        mock_wb.active = mock_ws
-        mock_load.return_value = mock_wb
-
-        rows = parse_excel_preview(b"fake", row_limit=3)
-        assert len(rows) == 3
-
-    @patch("app.utils.file_parser.load_workbook")
-    def test_none_cell_becomes_empty(self, mock_load):
-        mock_wb = MagicMock()
-        mock_ws = MagicMock()
-        mock_ws.iter_rows.return_value = [("a", None, "c")]
-        mock_wb.active = mock_ws
-        mock_load.return_value = mock_wb
-
-        rows = parse_excel_preview(b"fake")
-        assert rows[0] == ["a", "", "c"]
+        headers, data = parse_file_data("test.xlsx", b"fake", header_row_index=0)
+        assert headers == ["交易时间", "金额"]
+        assert len(data) == 1
 
 
 class TestParseFilePreview:
-    def test_xlsx_extension(self):
-        with patch("app.utils.file_parser.parse_excel_preview") as mock_excel:
-            mock_excel.return_value = [["a"]]
-            result = parse_file_preview("test.xlsx", b"fake")
-            mock_excel.assert_called_once()
+    def test_returns_dict_with_headers_and_sample_rows(self):
+        content = "交易时间,金额,描述\n2024-01-01,100,购物\n2024-01-02,200,餐饮".encode("utf-8")
+        result = parse_file_preview("test.csv", content, header_row_index=0, preview_rows=5)
+        assert "headers" in result
+        assert "sample_rows" in result
+        assert "header_row_index" in result
+        assert "total_rows" in result
+        assert result["headers"] == ["交易时间", "金额", "描述"]
+        assert result["header_row_index"] == 0
+        assert result["total_rows"] == 2
 
-    def test_xls_extension(self):
-        with patch("app.utils.file_parser.parse_excel_preview") as mock_excel:
-            mock_excel.return_value = [["a"]]
-            result = parse_file_preview("test.xls", b"fake")
-            mock_excel.assert_called_once()
+    def test_auto_detect_header(self):
+        content = (
+            "微信支付账单明细\n"
+            "昵称：test\n"
+            "\n"
+            "交易时间,金额\n"
+            "2024-01-01,100\n"
+            "2024-01-02,200"
+        ).encode("utf-8")
+        result = parse_file_preview("test.csv", content, header_row_index=None)
+        assert result["header_row_index"] == 3
+        assert result["headers"] == ["交易时间", "金额"]
 
     def test_csv_extension(self):
-        with patch("app.utils.file_parser.parse_csv_preview") as mock_csv:
-            mock_csv.return_value = [["a"]]
-            result = parse_file_preview("test.csv", b"fake")
-            mock_csv.assert_called_once()
+        content = "a,b\n1,2".encode("utf-8")
+        result = parse_file_preview("test.csv", content, header_row_index=0)
+        assert result["headers"] == ["a", "b"]
 
-    def test_no_extension_falls_to_csv(self):
-        with patch("app.utils.file_parser.parse_csv_preview") as mock_csv:
-            mock_csv.return_value = [["a"]]
-            result = parse_file_preview("testfile", b"fake")
-            mock_csv.assert_called_once()
+    def test_no_extension(self):
+        content = "a,b\n1,2".encode("utf-8")
+        result = parse_file_preview("testfile", content, header_row_index=0)
+        assert result["headers"] == ["a", "b"]

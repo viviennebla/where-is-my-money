@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,6 +13,12 @@ from app.services.balance_calculator import apply_balance, reverse_balance
 
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 
+SORT_COLUMNS = {
+    "date": Transaction.transaction_date,
+    "amount": Transaction.base_amount,
+    "type": Transaction.type,
+}
+
 
 @router.get("", response_model=TransactionListResponse)
 async def list_transactions(
@@ -23,6 +29,9 @@ async def list_transactions(
     tag_id: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    search: str | None = None,
+    sort_by: str = Query("date"),
+    sort_order: str = Query("desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -38,11 +47,26 @@ async def list_transactions(
         query = query.where(Transaction.transaction_date <= date_to)
     if tag_id:
         query = query.join(TransactionTag).where(TransactionTag.tag_id == tag_id)
+    if search:
+        pattern = f"%{search}%"
+        query = query.where(
+            or_(
+                Transaction.merchant_name.ilike(pattern),
+                Transaction.description.ilike(pattern),
+                Transaction.remark.ilike(pattern),
+            )
+        )
 
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar()
 
-    query = query.order_by(Transaction.transaction_date.desc()).offset((page - 1) * page_size).limit(page_size)
+    col = SORT_COLUMNS.get(sort_by, Transaction.transaction_date)
+    if sort_order == "asc":
+        query = query.order_by(col.asc())
+    else:
+        query = query.order_by(col.desc())
+
+    query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     items = result.scalars().all()
 

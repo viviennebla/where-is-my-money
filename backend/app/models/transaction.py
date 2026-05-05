@@ -37,6 +37,9 @@ class Transaction(Base):
 
     external_tx_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     external_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    merchant_order_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    transaction_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     transaction_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

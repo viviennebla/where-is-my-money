@@ -1,13 +1,23 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
+import { useAuthStore } from './stores/authStore'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
+import AccountsPage from './pages/AccountsPage'
 import ImportPage from './pages/ImportPage'
+import SettingsPage from './pages/SettingsPage'
 import AppShell from './components/layout/AppShell'
+import ErrorBoundary from './components/layout/ErrorBoundary'
 
 function App() {
   const { user, loading } = useAuth()
+  const hydrate = useAuthStore((s) => s.hydrate)
+
+  useEffect(() => {
+    hydrate()
+  }, [hydrate])
 
   if (loading) {
     return (
@@ -28,13 +38,17 @@ function App() {
   }
 
   return (
-    <AppShell>
-      <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/import" element={<ImportPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AppShell>
+    <ErrorBoundary>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/accounts" element={<AccountsPage />} />
+          <Route path="/import" element={<ImportPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppShell>
+    </ErrorBoundary>
   )
 }
 

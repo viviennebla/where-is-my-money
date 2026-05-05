@@ -2,7 +2,14 @@ import { useState, useRef } from 'react'
 import api from '../../api/client'
 
 interface Props {
-  onUploaded: (data: { file_id: string; filename: string; preview: string[][] }) => void
+  onUploaded: (data: {
+    file_id: string
+    filename: string
+    headers: string[]
+    sample_rows: string[][]
+    header_row_index: number
+    total_rows: number
+  }) => void
 }
 
 export default function FileUploader({ onUploaded }: Props) {

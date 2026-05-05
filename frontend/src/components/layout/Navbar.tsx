@@ -23,8 +23,14 @@ export default function Navbar() {
           <Link to="/" className={linkClass('/')}>
             流水
           </Link>
+          <Link to="/accounts" className={linkClass('/accounts')}>
+            账户
+          </Link>
           <Link to="/import" className={linkClass('/import')}>
             导入
+          </Link>
+          <Link to="/settings" className={linkClass('/settings')}>
+            设置
           </Link>
         </div>
         <div className="flex items-center gap-4">

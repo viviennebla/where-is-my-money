@@ -1,9 +1,12 @@
 export type TransactionType = 'expense' | 'income' | 'transfer' | 'refund'
 
+export type AccountType = 'bank_card' | 'software_balance' | 'financial_product' | 'monthly_bill' | 'installment'
+
 export interface Account {
   id: string
   name: string
   currency: string
+  account_type: AccountType
   initial_balance: string
   current_balance: string
   is_active: boolean

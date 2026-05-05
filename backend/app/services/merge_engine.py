@@ -86,7 +86,8 @@ async def _find_match(session: AsyncSession, user_id: str, rec: dict) -> Transac
 
 async def _merge(session: AsyncSession, existing: Transaction, rec: dict):
     """Merge non-null fields from rec into existing, with enrichment strategy."""
-    for field in ("merchant_name", "description", "remark", "external_tx_id", "external_source"):
+    for field in ("merchant_name", "description", "remark", "external_tx_id", "external_source",
+                  "merchant_order_id", "transaction_status", "source_category"):
         new_val = rec.get(field)
         old_val = getattr(existing, field, None)
         if new_val and old_val:

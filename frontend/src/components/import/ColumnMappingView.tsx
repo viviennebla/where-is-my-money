@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
-import api from '../../api/client'
+import { useState } from 'react'
 
 interface Props {
-  fileId: string
-  preview: string[][]
-  onConfirmed: (platformName: string, mapping: Record<string, string>) => void
+  headers: string[]
+  mapping: Record<string, string>
+  onChange: (srcCol: string, stdField: string) => void
+  disabled?: boolean
 }
 
 const STANDARD_FIELDS = [
@@ -14,93 +14,96 @@ const STANDARD_FIELDS = [
   { key: 'merchant_name', label: '商户名称' },
   { key: 'description', label: '商品描述' },
   { key: 'external_tx_id', label: '外部交易单号' },
+  { key: 'merchant_order_id', label: '商户单号' },
+  { key: 'transaction_status', label: '当前状态' },
+  { key: 'source_category', label: '交易类型' },
   { key: 'currency', label: '币种' },
+  { key: 'account_id', label: '账户ID（自动绑定）' },
+  { key: 'original_currency', label: '原始币种' },
+  { key: 'original_amount', label: '原始金额' },
+  { key: 'base_currency', label: '基础币种' },
+  { key: 'base_amount', label: '基础金额' },
+  { key: 'remark', label: '备注' },
 ]
 
-export default function ColumnMappingView({ fileId, preview, onConfirmed }: Props) {
-  const [mapping, setMapping] = useState<Record<string, string>>({})
-  const [platformName, setPlatformName] = useState('')
-  const [inferring, setInferring] = useState(false)
-  const [confidence, setConfidence] = useState<number | null>(null)
+const CUSTOM_VALUE = '__custom__'
 
-  const headers = preview[0] || []
+export default function ColumnMappingView({ headers, mapping, onChange, disabled }: Props) {
+  const [customKeys, setCustomKeys] = useState<Record<string, string>>({})
 
-  useEffect(() => {
-    setInferring(true)
-    api.post('/import/infer', { file_id: fileId, preview })
-      .then((res) => {
-        setMapping(res.data.field_mapping || {})
-        setConfidence(res.data.confidence)
-      })
-      .catch(() => {})
-      .finally(() => setInferring(false))
-  }, [fileId])
+  const isKnown = (col: string) =>
+    STANDARD_FIELDS.some((f) => f.key === mapping[col])
 
-  const updateMapping = (srcCol: string, stdField: string) => {
-    const next = { ...mapping }
-    if (stdField) {
-      next[srcCol] = stdField
+  const selectValue = (col: string) => {
+    const v = mapping[col]
+    if (!v) return ''
+    if (isKnown(col)) return v
+    return CUSTOM_VALUE
+  }
+
+  const handleSelect = (col: string, value: string) => {
+    if (value === CUSTOM_VALUE) {
+      // Switch to custom input mode — keep existing custom value or clear
+      setCustomKeys((prev) => ({ ...prev, [col]: mapping[col] || '' }))
+      onChange(col, mapping[col] || '')
     } else {
-      delete next[srcCol]
+      setCustomKeys((prev) => {
+        const next = { ...prev }
+        delete next[col]
+        return next
+      })
+      onChange(col, value)
     }
-    setMapping(next)
+  }
+
+  const handleCustomInput = (col: string, value: string) => {
+    setCustomKeys((prev) => ({ ...prev, [col]: value }))
+    onChange(col, value)
   }
 
   return (
-    <div className="space-y-4">
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="font-semibold text-blue-900 mb-2">AI 推断结果</h3>
-        {inferring ? (
-          <p className="text-blue-700 text-sm">正在分析文件结构...</p>
-        ) : (
-          <p className="text-blue-700 text-sm">
-            {confidence !== null
-              ? `推断完成（置信度: ${(confidence * 100).toFixed(0)}%），请确认并调整下方的映射关系`
-              : '推断失败，请手动配置映射'}
-          </p>
-        )}
-      </div>
-
-      <div className="bg-white rounded-lg border p-4">
-        <h4 className="font-medium mb-3">列映射配置</h4>
-        {headers.map((col) => (
-          <div key={col} className="flex items-center gap-3 py-2 border-b border-gray-50">
-            <span className="w-40 text-sm font-medium text-gray-700 truncate" title={col}>
-              {col}
-            </span>
-            <span className="text-gray-300">→</span>
+    <div className="bg-white rounded-lg border p-4">
+      <h4 className="font-medium mb-3">列映射配置</h4>
+      <p className="text-xs text-gray-400 mb-3">
+        为每个文件列选择对应的标准字段，或选择"自定义"输入自己的字段名。
+      </p>
+      {headers.map((col) => (
+        <div key={col} className="py-3 border-b border-gray-50">
+          <span className="block text-sm font-medium text-gray-700 truncate mb-1" title={col}>
+            {col}
+          </span>
+          <div className="flex items-center gap-2">
             <select
-              value={mapping[col] || ''}
-              onChange={(e) => updateMapping(col, e.target.value)}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-2 flex-1"
+              value={selectValue(col)}
+              onChange={(e) => handleSelect(col, e.target.value)}
+              disabled={disabled}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-w-0 flex-1 disabled:opacity-50 disabled:bg-gray-50 bg-white"
             >
-              <option value="">忽略此列</option>
-              {STANDARD_FIELDS.map((f) => (
+              <option value="">-- 不映射 --</option>
+              <option disabled>── 常用字段 ──</option>
+              {STANDARD_FIELDS.slice(0, 10).map((f) => (
                 <option key={f.key} value={f.key}>{f.label}</option>
               ))}
+              <option disabled>── 其他字段 ──</option>
+              {STANDARD_FIELDS.slice(10).map((f) => (
+                <option key={f.key} value={f.key}>{f.label}</option>
+              ))}
+              <option disabled>──</option>
+              <option value={CUSTOM_VALUE}>✎ 自定义...</option>
             </select>
+            {selectValue(col) === CUSTOM_VALUE && (
+              <input
+                type="text"
+                value={customKeys[col] ?? ''}
+                onChange={(e) => handleCustomInput(col, e.target.value)}
+                disabled={disabled}
+                placeholder="输入字段名..."
+                className="text-sm border border-gray-300 rounded-lg px-3 py-2 w-36 disabled:opacity-50 disabled:bg-gray-50"
+              />
+            )}
           </div>
-        ))}
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">平台名称（用于保存模板）</label>
-        <input
-          type="text"
-          value={platformName}
-          onChange={(e) => setPlatformName(e.target.value)}
-          placeholder="例如: 微信账单"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-        />
-      </div>
-
-      <button
-        onClick={() => onConfirmed(platformName || '未命名平台', mapping)}
-        disabled={!platformName || Object.keys(mapping).length === 0}
-        className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-      >
-        确认并保存模板
-      </button>
+        </div>
+      ))}
     </div>
   )
 }

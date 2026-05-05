@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     DEEPSEEK_MODEL: str = "deepseek-v4-pro"
     DEEPSEEK_FLASH_MODEL: str = "deepseek-v4-flash"
     UPLOAD_DIR: str = "/app/uploads"
+    MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024
 
     model_config = {"env_file": ".env"}
 

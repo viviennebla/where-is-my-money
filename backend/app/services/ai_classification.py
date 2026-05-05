@@ -52,7 +52,7 @@ async def _find_local_rules(db: AsyncSession, tx: Transaction) -> str | None:
     return row.tag_id if row else None
 
 
-async def classify_transaction(db: AsyncSession, tx: Transaction) -> list[dict]:
+async def classify_transaction(db: AsyncSession, tx: Transaction, api_key: str) -> list[dict]:
     """Classify a transaction. Returns list of {tag_id, name}."""
     user_id = tx.user_id
 
@@ -82,7 +82,7 @@ async def classify_transaction(db: AsyncSession, tx: Transaction) -> list[dict]:
     }
 
     headers_dict = {
-        "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "anthropic-version": "2023-06-01",
     }

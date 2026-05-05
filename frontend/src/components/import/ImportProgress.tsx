@@ -2,11 +2,12 @@ import { useState } from 'react'
 import api from '../../api/client'
 
 interface Props {
-  templateId: string
+  fileId: string
+  accountBindings: Record<string, string> | null
   onDone: (result: { created: number; updated: number; total: number }) => void
 }
 
-export default function ImportProgress({ templateId, onDone }: Props) {
+export default function ImportProgress({ fileId, accountBindings, onDone }: Props) {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
 
@@ -14,7 +15,10 @@ export default function ImportProgress({ templateId, onDone }: Props) {
     setRunning(true)
     setError('')
     try {
-      const res = await api.post('/import/execute', { template_id: templateId })
+      const res = await api.post('/import/execute', {
+        file_id: fileId,
+        account_binding: accountBindings,
+      })
       onDone(res.data)
     } catch {
       setError('导入执行失败，请重试')
@@ -37,7 +41,7 @@ export default function ImportProgress({ templateId, onDone }: Props) {
         </div>
       ) : (
         <div>
-          <p className="text-gray-500 mb-4">模板已保存，点击下方按钮开始解析全量文件并导入</p>
+          <p className="text-gray-500 mb-4">配置完成，点击下方按钮开始解析全量文件并导入</p>
           <button
             onClick={execute}
             disabled={running}

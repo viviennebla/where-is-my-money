@@ -19,6 +19,9 @@ class TransactionCreate(BaseModel):
     remark: str | None = None
     external_tx_id: str | None = None
     external_source: str | None = None
+    merchant_order_id: str | None = None
+    transaction_status: str | None = None
+    source_category: str | None = None
     transaction_date: datetime
     tag_ids: list[str] = []
 
@@ -27,6 +30,9 @@ class TransactionUpdate(BaseModel):
     merchant_name: str | None = None
     description: str | None = None
     remark: str | None = None
+    merchant_order_id: str | None = None
+    transaction_status: str | None = None
+    source_category: str | None = None
     tag_ids: list[str] | None = None
 
 
@@ -45,6 +51,9 @@ class TransactionResponse(BaseModel):
     remark: str | None
     external_tx_id: str | None
     external_source: str | None
+    merchant_order_id: str | None
+    transaction_status: str | None
+    source_category: str | None
     transaction_date: datetime
     created_at: datetime
     updated_at: datetime

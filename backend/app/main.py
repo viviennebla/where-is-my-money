@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base
-from app.routers import auth, accounts, tags, transactions, import_pipeline
+from app.routers import auth, accounts, tags, transactions, import_pipeline, settings
 import app.models  # noqa: F401 — ensure all models are registered on Base.metadata
 
 
@@ -30,6 +30,7 @@ app.include_router(accounts.router)
 app.include_router(tags.router)
 app.include_router(transactions.router)
 app.include_router(import_pipeline.router)
+app.include_router(settings.router)
 
 
 @app.get("/api/health")
