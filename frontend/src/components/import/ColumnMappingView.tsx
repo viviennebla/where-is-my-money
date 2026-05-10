@@ -11,7 +11,7 @@ const STANDARD_FIELDS = [
   { key: 'transaction_date', label: '交易时间' },
   { key: 'amount', label: '金额' },
   { key: 'type', label: '收支方向' },
-  { key: 'merchant_name', label: '商户名称' },
+  { key: 'merchant_name', label: '交易对象' },
   { key: 'description', label: '商品描述' },
   { key: 'external_tx_id', label: '外部交易单号' },
   { key: 'merchant_order_id', label: '商户单号' },

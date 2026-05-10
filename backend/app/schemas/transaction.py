@@ -27,12 +27,23 @@ class TransactionCreate(BaseModel):
 
 
 class TransactionUpdate(BaseModel):
+    type: TransactionType | None = None
+    original_currency: str | None = None
+    original_amount: Decimal | None = None
+    base_currency: str | None = None
+    base_amount: Decimal | None = None
+    account_id: str | None = None
+    transfer_account_id: str | None = None
+    parent_id: str | None = None
     merchant_name: str | None = None
     description: str | None = None
     remark: str | None = None
+    external_tx_id: str | None = None
+    external_source: str | None = None
     merchant_order_id: str | None = None
     transaction_status: str | None = None
     source_category: str | None = None
+    transaction_date: datetime | None = None
     tag_ids: list[str] | None = None
 
 
@@ -44,16 +55,18 @@ class TransactionResponse(BaseModel):
     base_currency: str
     base_amount: Decimal
     account_id: str
-    transfer_account_id: str | None
-    parent_id: str | None
-    merchant_name: str | None
-    description: str | None
-    remark: str | None
-    external_tx_id: str | None
-    external_source: str | None
-    merchant_order_id: str | None
-    transaction_status: str | None
-    source_category: str | None
+    account_name: str = ""
+    transfer_account_id: str | None = None
+    transfer_account_name: str | None = None
+    parent_id: str | None = None
+    merchant_name: str | None = None
+    description: str | None = None
+    remark: str | None = None
+    external_tx_id: str | None = None
+    external_source: str | None = None
+    merchant_order_id: str | None = None
+    transaction_status: str | None = None
+    source_category: str | None = None
     transaction_date: datetime
     created_at: datetime
     updated_at: datetime

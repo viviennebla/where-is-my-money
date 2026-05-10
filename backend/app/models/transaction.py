@@ -12,6 +12,7 @@ class TransactionType(str, enum.Enum):
     INCOME = "income"
     TRANSFER = "transfer"
     REFUND = "refund"
+    BALANCE_ADJUSTMENT = "balance_adjustment"
 
 
 class Transaction(Base):

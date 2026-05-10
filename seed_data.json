@@ -1,0 +1,48 @@
+{
+  "preset_templates": [
+    {
+      "id": "4855e1e7-4e24-4c40-983b-14b74386aeec",
+      "platform_name": "微信",
+      "field_mapping": {
+        "交易时间": "transaction_date",
+        "交易类型": "source_category",
+        "交易对方": "merchant_name",
+        "商品": "description",
+        "金额(元)": "amount",
+        "当前状态": "transaction_status",
+        "交易单号": "external_tx_id",
+        "商户单号": "merchant_order_id",
+        "支付方式": "account_id",
+        "备注": "remark",
+        "收/支": "type"
+      },
+      "file_format_hint": null,
+      "is_preset": true
+    }
+  ],
+  "seed_data": {
+    "user_email": "root@root.com",
+    "user_id": "edf42ff9-8ead-43b5-aeaa-0bc32990bffa",
+    "accounts": [
+      {
+        "id": "26aa8d92-3ff3-436c-bad8-713d2bc8c8f7",
+        "name": "微信零钱",
+        "account_type": "SOFTWARE_BALANCE",
+        "currency": "CNY",
+        "initial_balance": "0",
+        "current_balance": "-32335.59",
+        "is_active": true
+      },
+      {
+        "id": "559952b6-ac82-4a4e-9e79-7dd65c4a9cf8",
+        "name": "零钱通",
+        "account_type": "SOFTWARE_BALANCE",
+        "currency": "CNY",
+        "initial_balance": "0",
+        "current_balance": "-8690.55",
+        "is_active": true
+      }
+    ],
+    "transaction_count": 470
+  }
+}

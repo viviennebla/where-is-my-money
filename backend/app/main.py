@@ -2,16 +2,33 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.database import engine, Base
 from app.routers import auth, accounts, tags, transactions, import_pipeline, settings
 import app.models  # noqa: F401 — ensure all models are registered on Base.metadata
 
 
+async def _migrate():
+    """Add missing columns for SQLite (create_all doesn't alter existing tables)."""
+    migrations = [
+        "ALTER TABLE accounts ADD COLUMN alias VARCHAR(100)",
+        "ALTER TABLE accounts ADD COLUMN card_number VARCHAR(50)",
+        "ALTER TABLE import_templates ADD COLUMN is_preset BOOLEAN DEFAULT 0",
+    ]
+    async with engine.begin() as conn:
+        for sql in migrations:
+            try:
+                await conn.execute(text(sql))
+            except Exception:
+                pass  # Column already exists
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await _migrate()
     yield
 
 

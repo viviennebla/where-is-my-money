@@ -18,6 +18,8 @@ dist/
 
 # DB & 上传
 *.sqlite3
+*.db
+data/
 uploads/
 
 # IDE

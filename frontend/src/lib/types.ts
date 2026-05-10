@@ -1,4 +1,4 @@
-export type TransactionType = 'expense' | 'income' | 'transfer' | 'refund'
+export type TransactionType = 'expense' | 'income' | 'transfer' | 'refund' | 'balance_adjustment'
 
 export type AccountType = 'bank_card' | 'software_balance' | 'financial_product' | 'monthly_bill' | 'installment'
 
@@ -9,6 +9,8 @@ export interface Account {
   account_type: AccountType
   initial_balance: string
   current_balance: string
+  alias: string | null
+  card_number: string | null
   is_active: boolean
   created_at: string
   updated_at: string
@@ -22,7 +24,9 @@ export interface Transaction {
   base_currency: string
   base_amount: string
   account_id: string
+  account_name?: string
   transfer_account_id: string | null
+  transfer_account_name?: string | null
   parent_id: string | null
   merchant_name: string | null
   description: string | null
@@ -48,4 +52,7 @@ export interface ImportTemplate {
   platform_name: string
   field_mapping: Record<string, string>
   file_format_hint: string | null
+  is_preset: boolean
+  created_at: string
+  updated_at: string
 }

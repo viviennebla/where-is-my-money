@@ -16,6 +16,8 @@ async def apply_balance(session: AsyncSession, tx: Transaction):
             account.current_balance -= tx.base_amount
         case TransactionType.INCOME:
             account.current_balance += tx.base_amount
+        case TransactionType.BALANCE_ADJUSTMENT:
+            account.current_balance += tx.base_amount
         case TransactionType.REFUND:
             account.current_balance += tx.base_amount
             if tx.parent_id:
@@ -42,6 +44,8 @@ async def reverse_balance(session: AsyncSession, tx: Transaction):
         case TransactionType.EXPENSE:
             account.current_balance += tx.base_amount
         case TransactionType.INCOME:
+            account.current_balance -= tx.base_amount
+        case TransactionType.BALANCE_ADJUSTMENT:
             account.current_balance -= tx.base_amount
         case TransactionType.REFUND:
             account.current_balance -= tx.base_amount

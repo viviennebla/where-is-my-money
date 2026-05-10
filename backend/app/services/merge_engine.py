@@ -30,6 +30,12 @@ async def upsert_transactions(
     updated = 0
 
     for rec in records:
+        # Override type to refund if status/category indicates it
+        if rec.get("transaction_status") and "退款" in str(rec["transaction_status"]):
+            rec["type"] = TransactionType.REFUND
+        elif rec.get("source_category") and "退款" in str(rec["source_category"]):
+            rec["type"] = TransactionType.REFUND
+
         existing = await _find_match(session, user_id, rec)
 
         if existing:
@@ -96,3 +102,66 @@ async def _merge(session: AsyncSession, existing: Transaction, rec: dict):
             setattr(existing, field, new_val)
 
     existing.updated_at = datetime.utcnow()
+
+
+async def match_refunds(session: AsyncSession, user_id: str) -> int:
+    """Match REFUND transactions without parent_id to their original expenses.
+
+    Returns count of refunds matched.
+    """
+    from sqlalchemy import select, and_
+    from app.models.transaction import Transaction, TransactionType
+
+    # Find all unmatched refunds for this user
+    result = await session.execute(
+        select(Transaction).where(
+            Transaction.user_id == user_id,
+            Transaction.type == TransactionType.REFUND,
+            Transaction.parent_id.is_(None),
+        )
+    )
+    refunds = result.scalars().all()
+
+    if not refunds:
+        return 0
+
+    matched = 0
+    for refund in refunds:
+        match = None
+
+        # Strategy 1: same merchant_order_id
+        if refund.merchant_order_id:
+            match_result = await session.execute(
+                select(Transaction).where(
+                    Transaction.user_id == user_id,
+                    Transaction.type == TransactionType.EXPENSE,
+                    Transaction.merchant_order_id == refund.merchant_order_id,
+                    Transaction.id != refund.id,
+                ).order_by(Transaction.transaction_date.desc()).limit(1)
+            )
+            match = match_result.scalar_one_or_none()
+
+        # Strategy 2: same merchant_name + same amount within 30-day window
+        if not match and refund.merchant_name and refund.merchant_order_id is None:
+            window_start = refund.transaction_date - timedelta(days=30)
+            match_result = await session.execute(
+                select(Transaction).where(
+                    Transaction.user_id == user_id,
+                    Transaction.type == TransactionType.EXPENSE,
+                    Transaction.merchant_name == refund.merchant_name,
+                    Transaction.original_amount == refund.original_amount,
+                    Transaction.transaction_date >= window_start,
+                    Transaction.transaction_date <= refund.transaction_date,
+                    Transaction.id != refund.id,
+                ).order_by(Transaction.transaction_date.desc()).limit(1)
+            )
+            match = match_result.scalar_one_or_none()
+
+        if match:
+            refund.parent_id = match.id
+            matched += 1
+
+    if matched > 0:
+        await session.commit()
+
+    return matched

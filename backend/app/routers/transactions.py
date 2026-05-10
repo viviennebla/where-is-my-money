@@ -66,12 +66,22 @@ async def list_transactions(
     else:
         query = query.order_by(col.desc())
 
-    query = query.offset((page - 1) * page_size).limit(page_size)
+    query = query.options(
+        selectinload(Transaction.account),
+        selectinload(Transaction.transfer_account),
+    ).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
-    items = result.scalars().all()
+    items = result.unique().scalars().all()
+
+    response_items = []
+    for t in items:
+        d = TransactionResponse.model_validate(t).model_dump()
+        d['account_name'] = t.account.name if t.account else ''
+        d['transfer_account_name'] = t.transfer_account.name if t.transfer_account else None
+        response_items.append(TransactionResponse(**d))
 
     return TransactionListResponse(
-        items=[TransactionResponse.model_validate(t) for t in items],
+        items=response_items,
         total=total,
     )
 
@@ -130,12 +140,52 @@ async def update_transaction(
     if not tx:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
 
+    # Check if balance-affecting fields changed
+    balance_changed = (
+        body.type is not None or
+        body.base_amount is not None or
+        body.account_id is not None or
+        body.transfer_account_id is not None or
+        body.parent_id is not None
+    )
+
+    if balance_changed:
+        await reverse_balance(db, tx)
+
+    if body.type is not None:
+        tx.type = body.type
+    if body.original_currency is not None:
+        tx.original_currency = body.original_currency
+    if body.original_amount is not None:
+        tx.original_amount = body.original_amount
+    if body.base_currency is not None:
+        tx.base_currency = body.base_currency
+    if body.base_amount is not None:
+        tx.base_amount = body.base_amount
+    if body.account_id is not None:
+        tx.account_id = body.account_id
+    if body.transfer_account_id is not None:
+        tx.transfer_account_id = body.transfer_account_id
+    if body.parent_id is not None:
+        tx.parent_id = body.parent_id
     if body.merchant_name is not None:
         tx.merchant_name = body.merchant_name
     if body.description is not None:
         tx.description = body.description
     if body.remark is not None:
         tx.remark = body.remark
+    if body.external_tx_id is not None:
+        tx.external_tx_id = body.external_tx_id
+    if body.external_source is not None:
+        tx.external_source = body.external_source
+    if body.merchant_order_id is not None:
+        tx.merchant_order_id = body.merchant_order_id
+    if body.transaction_status is not None:
+        tx.transaction_status = body.transaction_status
+    if body.source_category is not None:
+        tx.source_category = body.source_category
+    if body.transaction_date is not None:
+        tx.transaction_date = body.transaction_date
 
     if body.tag_ids is not None:
         existing = await db.execute(
@@ -145,6 +195,9 @@ async def update_transaction(
             await db.delete(tt)
         for tag_id in body.tag_ids:
             db.add(TransactionTag(transaction_id=tx.id, tag_id=tag_id))
+
+    if balance_changed:
+        await apply_balance(db, tx)
 
     await db.commit()
     await db.refresh(tx)

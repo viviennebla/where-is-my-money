@@ -7,6 +7,7 @@ interface PaymentMethod {
   suggested_account_id: string | null
   suggested_account_name: string | null
   all_accounts: Array<{ id: string; name: string; account_type: string }>
+  sample_rows: Array<Record<string, string>>
 }
 
 interface Props {
@@ -22,6 +23,93 @@ const ACCOUNT_TYPES = [
   { value: 'monthly_bill', label: '月度账单' },
   { value: 'installment', label: '分期付款' },
 ]
+
+const KEY_LABELS: Record<string, string> = {
+  '交易时间': '交易时间',
+  '金额': '金额',
+  '收支方向': '收支方向',
+  '商户名称': '交易对象',
+  '商品描述': '描述',
+  '当前状态': '状态',
+  '交易类型': '类型',
+  '备注': '备注',
+}
+
+function PaymentMethodRow({ method, binding, onChange }: {
+  method: PaymentMethod
+  binding: string
+  onChange: (v: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const accounts = method.all_accounts || []
+  const samples = method.sample_rows || []
+
+  const previewFields = samples.length > 0
+    ? Object.keys(samples[0]).filter((k) => KEY_LABELS[k]).slice(0, 6)
+    : []
+
+  return (
+    <div className="border-b border-gray-100 py-2">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-gray-400 hover:text-gray-600 text-xs"
+          title="展开查看数据详情"
+        >
+          {expanded ? '▼' : '▶'}
+        </button>
+        <div className="w-44">
+          <span className="text-sm font-medium text-gray-700">{method.payment_method}</span>
+          <span className="text-xs text-gray-400 ml-2">({method.count}条)</span>
+        </div>
+        <span className="text-gray-300">→</span>
+        <select
+          value={binding}
+          onChange={(e) => onChange(e.target.value)}
+          className="text-sm border border-gray-300 rounded-lg px-3 py-2 flex-1 bg-white"
+        >
+          <option value="">选择账户...</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+        {method.suggested_account_name && (
+          <span className="text-xs text-green-600 whitespace-nowrap">
+            建议: {method.suggested_account_name}
+          </span>
+        )}
+      </div>
+
+      {/* Expanded sample data */}
+      {expanded && samples.length > 0 && (
+        <div className="mt-2 ml-6 overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-50">
+                {previewFields.map((f) => (
+                  <th key={f} className="px-2 py-1 text-left text-gray-500 border-b whitespace-nowrap">
+                    {KEY_LABELS[f] || f}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {samples.slice(0, 3).map((row, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  {previewFields.map((f) => (
+                    <td key={f} className="px-2 py-1 text-gray-700 border-b border-gray-50 whitespace-nowrap max-w-32 truncate" title={row[f]}>
+                      {row[f] || '-'}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function AccountBindingView({ fileId, onConfirmed, onBack }: Props) {
   const [loading, setLoading] = useState(true)
@@ -44,14 +132,6 @@ export default function AccountBindingView({ fileId, onConfirmed, onBack }: Prop
       .then((res) => {
         setColumnName(res.data.column_name)
         setMethods(res.data.methods || [])
-        // Auto-bind suggested matches
-        const initial: Record<string, string> = {}
-        res.data.methods?.forEach((m: PaymentMethod) => {
-          if (m.suggested_account_id) {
-            initial[m.payment_method] = m.suggested_account_id
-          }
-        })
-        setBindings(initial)
       })
       .catch(() => setError('获取支付方式失败'))
       .finally(() => setLoading(false))
@@ -72,7 +152,6 @@ export default function AccountBindingView({ fileId, onConfirmed, onBack }: Prop
     try {
       const res = await api.post('/accounts', newAccount)
       const acc = res.data
-      // Add the new account to all methods' account lists
       setMethods((prev) =>
         prev.map((m) => ({
           ...m,
@@ -95,8 +174,6 @@ export default function AccountBindingView({ fileId, onConfirmed, onBack }: Prop
       const res = await api.post('/import/ai-match-accounts', { file_id: fileId })
       const aiMatches: Record<string, string | null> = res.data.matches || {}
       setAiNotes(res.data.notes || '')
-
-      // Apply AI matches to bindings
       setBindings((prev) => {
         const next = { ...prev }
         for (const [method, accountId] of Object.entries(aiMatches)) {
@@ -168,7 +245,7 @@ export default function AccountBindingView({ fileId, onConfirmed, onBack }: Prop
       <div className="bg-white rounded-lg shadow-sm border p-4">
         <h3 className="font-semibold text-gray-900 mb-1">账户绑定</h3>
         <p className="text-sm text-gray-500 mb-3">
-          将文件中的支付方式「{columnName}」映射到系统账户
+          将文件中的支付方式「{columnName}」映射到系统账户。点击 ▶ 展开查看该支付方式的交易明细。
         </p>
 
         <div className="flex items-center gap-3 mb-3">
@@ -201,32 +278,15 @@ export default function AccountBindingView({ fileId, onConfirmed, onBack }: Prop
 
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
-        <div className="space-y-3">
-          {methods.map((m) => {
-            const accounts = m.all_accounts || []
-            return (
-              <div key={m.payment_method} className="flex items-center gap-3 py-2 border-b border-gray-50">
-                <div className="w-48">
-                  <span className="text-sm font-medium text-gray-700">{m.payment_method}</span>
-                  <span className="text-xs text-gray-400 ml-2">({m.count}条)</span>
-                </div>
-                <span className="text-gray-300">→</span>
-                <select
-                  value={bindings[m.payment_method] || ''}
-                  onChange={(e) => updateBinding(m.payment_method, e.target.value)}
-                  className="text-sm border border-gray-300 rounded-lg px-3 py-2 flex-1 bg-white"
-                >
-                  <option value="">选择账户...</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
-                {m.suggested_account_name && (
-                  <span className="text-xs text-green-600">建议: {m.suggested_account_name}</span>
-                )}
-              </div>
-            )
-          })}
+        <div className="space-y-1">
+          {methods.map((m) => (
+            <PaymentMethodRow
+              key={m.payment_method}
+              method={m}
+              binding={bindings[m.payment_method] || ''}
+              onChange={(v) => updateBinding(m.payment_method, v)}
+            />
+          ))}
         </div>
       </div>
 

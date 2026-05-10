@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import api from '../../api/client'
 import ColumnMappingView from './ColumnMappingView'
+import { ImportTemplate } from '../../lib/types'
 
 interface Props {
   fileId: string
@@ -46,6 +48,21 @@ function buildPromptPreview(headers: string[], sampleRows: string[][]): string {
   return `${AI_SYSTEM_PROMPT}\n\nFile preview:\n${sampleText}`
 }
 
+const STD_LABELS: Record<string, string> = {
+  transaction_date: '交易时间',
+  amount: '金额',
+  type: '收支方向',
+  merchant_name: '交易对象',
+  description: '商品描述',
+  external_tx_id: '外部单号',
+  merchant_order_id: '商户单号',
+  transaction_status: '当前状态',
+  source_category: '交易类型',
+  original_currency: '原始币种',
+  original_amount: '原始金额',
+  remark: '备注',
+}
+
 export default function AIParseView({ fileId, headers, sampleRows, onConfirmed, onBack }: Props) {
   const [inferring, setInferring] = useState(false)
   const [inferred, setInferred] = useState(false)
@@ -57,8 +74,28 @@ export default function AIParseView({ fileId, headers, sampleRows, onConfirmed, 
   const [platformName, setPlatformName] = useState('')
   const [showPrompt, setShowPrompt] = useState(true)
   const [showResponse, setShowResponse] = useState(false)
+  const [preview, setPreview] = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null)
 
   const promptPreview = useMemo(() => buildPromptPreview(headers, sampleRows), [headers, sampleRows])
+
+  const { data: templates } = useQuery<ImportTemplate[]>({
+    queryKey: ['templates'],
+    queryFn: () => api.get('/settings/templates').then((r) => r.data),
+  })
+
+  const applyTemplate = (tmpl: ImportTemplate) => {
+    const m = tmpl.field_mapping || {}
+    setMapping(m)
+    setPlatformName(tmpl.platform_name)
+    setInferred(true)
+    setConfidence(1.0)
+    setNotes(`已加载模板「${tmpl.platform_name}」`)
+    if (Object.keys(m).length > 0) {
+      api.post('/import/preview-parsed', { file_id: fileId, field_mapping: m })
+        .then((p) => setPreview(p.data))
+        .catch(() => {})
+    }
+  }
 
   const handleInfer = () => {
     setInferring(true)
@@ -67,14 +104,20 @@ export default function AIParseView({ fileId, headers, sampleRows, onConfirmed, 
     setConfidence(null)
     setNotes('')
     setShowResponse(false)
+    setPreview(null)
     api.post('/import/infer', { file_id: fileId })
       .then((res) => {
-        setMapping(res.data.field_mapping || {})
+        const m = res.data.field_mapping || {}
+        setMapping(m)
         setConfidence(res.data.confidence)
         setNotes(res.data.notes)
         setRawResponse(res.data.raw_response || '')
         setShowResponse(true)
         setInferred(true)
+        // Fetch preview data
+        api.post('/import/preview-parsed', { file_id: fileId, field_mapping: m })
+          .then((p) => setPreview(p.data))
+          .catch(() => {})
       })
       .catch((err) => {
         const msg = err.response?.data?.detail || err.response?.data?.message || err.message || '未知错误'
@@ -91,6 +134,14 @@ export default function AIParseView({ fileId, headers, sampleRows, onConfirmed, 
       delete next[srcCol]
     }
     setMapping(next)
+    // Refresh preview when mapping changes
+    if (Object.keys(next).length > 0) {
+      api.post('/import/preview-parsed', { file_id: fileId, field_mapping: next })
+        .then((p) => setPreview(p.data))
+        .catch(() => {})
+    } else {
+      setPreview(null)
+    }
   }
 
   const formatJson = (raw: string) => {
@@ -101,8 +152,37 @@ export default function AIParseView({ fileId, headers, sampleRows, onConfirmed, 
     }
   }
 
+  const previewHeaders = preview?.headers || []
+  const previewRows = preview?.rows || []
+
   return (
     <div className="space-y-4">
+      {/* Template Selection */}
+      {templates && templates.length > 0 && (
+        <div className="bg-white rounded-lg border p-4">
+          <h4 className="font-medium text-sm text-gray-700 mb-2">选择已有模板</h4>
+          <p className="text-xs text-gray-400 mb-3">选择一个已保存的模板可跳过 AI 分析步骤，直接应用字段映射。</p>
+          <div className="flex flex-wrap gap-2">
+            {templates.map((tmpl) => (
+              <button
+                key={tmpl.id}
+                onClick={() => applyTemplate(tmpl)}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                  platformName === tmpl.platform_name && inferred
+                    ? 'bg-blue-50 border-blue-300 text-blue-700'
+                    : 'border-gray-200 hover:bg-gray-50 text-gray-600'
+                }`}
+              >
+                {tmpl.platform_name}
+                <span className="text-xs text-gray-400 ml-1">
+                  ({Object.keys(tmpl.field_mapping).length}字段)
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* AI Analysis Panel */}
       <div className="bg-white rounded-lg shadow-sm border">
         <div className="p-4 border-b flex items-center justify-between">
@@ -205,6 +285,40 @@ export default function AIParseView({ fileId, headers, sampleRows, onConfirmed, 
         onChange={updateMapping}
         disabled={inferring}
       />
+
+      {/* Data Preview */}
+      {previewRows.length > 0 && (
+        <div className="bg-white rounded-lg border p-4">
+          <h4 className="font-medium mb-2">解析结果预览（前 {previewRows.length} 条）</h4>
+          <p className="text-xs text-gray-400 mb-3">请确认列映射后数据是否正确，如有问题请调整上方映射。</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-3 py-2 text-left text-xs text-gray-500 border-b">#</th>
+                  {previewHeaders.map((h) => (
+                    <th key={h} className="px-3 py-2 text-left text-xs text-gray-500 border-b whitespace-nowrap">
+                      {STD_LABELS[h] || h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {previewRows.map((row, i) => (
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="px-3 py-1.5 text-gray-400 text-xs border-b">{i + 1}</td>
+                    {previewHeaders.map((h) => (
+                      <td key={h} className="px-3 py-1.5 text-xs text-gray-700 border-b whitespace-nowrap max-w-40 truncate" title={row[h]}>
+                        {row[h] || '-'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Platform name */}
       <div>

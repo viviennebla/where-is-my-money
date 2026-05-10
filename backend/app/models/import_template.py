@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, ForeignKey, JSON, UniqueConstraint, String
+from sqlalchemy import String, DateTime, ForeignKey, JSON, Boolean, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -13,6 +13,7 @@ class ImportTemplate(Base):
     platform_name: Mapped[str] = mapped_column(String(100), nullable=False)
     field_mapping: Mapped[dict] = mapped_column(JSON, nullable=False)
     file_format_hint: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_preset: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

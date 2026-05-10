@@ -1,15 +1,22 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
+import { ImportTemplate } from '../lib/types'
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery<{ has_key: boolean }>({
     queryKey: ['api-key-status'],
     queryFn: () => api.get('/settings/api-key').then((r) => r.data),
+  })
+
+  const { data: templates, isLoading: templatesLoading } = useQuery<ImportTemplate[]>({
+    queryKey: ['templates'],
+    queryFn: () => api.get('/settings/templates').then((r) => r.data),
   })
 
   const saveMutation = useMutation({
@@ -17,6 +24,12 @@ export default function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-key-status'] })
       setApiKey('')
+      setErrorMsg(null)
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('Save API key failed:', msg, err)
+      setErrorMsg(msg)
     },
   })
 
@@ -24,13 +37,26 @@ export default function SettingsPage() {
     mutationFn: () => api.delete('/settings/api-key'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-key-status'] })
+      setErrorMsg(null)
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('Delete API key failed:', msg, err)
+      setErrorMsg(msg)
     },
   })
 
-  async function handleSave(e: React.FormEvent) {
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/settings/templates/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] })
+    },
+  })
+
+  function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!apiKey.trim()) return
-    await saveMutation.mutateAsync(apiKey.trim())
+    saveMutation.mutate(apiKey.trim())
   }
 
   if (isLoading) {
@@ -102,16 +128,58 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {saveMutation.isError && (
-            <p className="text-sm text-red-600">保存失败，请重试</p>
-          )}
-          {deleteMutation.isError && (
-            <p className="text-sm text-red-600">删除失败，请重试</p>
-          )}
           {saveMutation.isSuccess && (
             <p className="text-sm text-green-600">API Key 已保存</p>
           )}
+          {errorMsg && (
+            <p className="text-sm text-red-600 break-all">保存失败：{errorMsg}</p>
+          )}
         </form>
+      </div>
+
+      {/* Templates Section */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+        <h2 className="text-lg font-semibold mb-2">导入模板管理</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          管理已保存的导入模板，可在导入时直接选择模板跳过 AI 分析步骤。
+        </p>
+
+        {templatesLoading ? (
+          <p className="text-gray-500 text-sm">加载中...</p>
+        ) : !templates?.length ? (
+          <p className="text-gray-400 text-sm">暂无保存的模板</p>
+        ) : (
+          <div className="space-y-2">
+            {templates.map((tmpl) => (
+              <div key={tmpl.id} className="flex items-center justify-between border border-gray-100 rounded-lg p-3 hover:bg-gray-50">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">
+                    {tmpl.platform_name}
+                    {tmpl.is_preset && (
+                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">预设</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {Object.keys(tmpl.field_mapping).length} 个字段映射 · 更新于 {new Date(tmpl.updated_at).toLocaleDateString('zh-CN')}
+                  </p>
+                </div>
+                {!tmpl.is_preset && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`确定要删除模板「${tmpl.platform_name}」吗？`)) {
+                        deleteTemplateMutation.mutate(tmpl.id)
+                      }
+                    }}
+                    disabled={deleteTemplateMutation.isPending}
+                    className="px-3 py-1 text-xs text-red-500 hover:bg-red-50 rounded disabled:opacity-50"
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

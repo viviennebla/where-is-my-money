@@ -5,7 +5,7 @@ import { useFilterStore } from '../../stores/filterStore'
 import { Transaction } from '../../lib/types'
 import TransactionRow from './TransactionRow'
 import TransactionFilters from './TransactionFilters'
-import TagEditor from './TagEditor'
+import TransactionEditor from './TransactionEditor'
 
 export default function TransactionList() {
   const { type, accountId, dateFrom, dateTo, search, sortBy, sortOrder } = useFilterStore()
@@ -47,8 +47,9 @@ export default function TransactionList() {
             <thead className="bg-gray-50 text-left text-xs text-gray-500 uppercase">
               <tr>
                 <th className="py-3 px-2">日期</th>
+                <th className="py-3 px-2">账户</th>
                 <th className="py-3 px-2">类型</th>
-                <th className="py-3 px-2">商户</th>
+                <th className="py-3 px-2">交易对象</th>
                 <th className="py-3 px-2">描述</th>
                 <th className="py-3 px-2 text-right">金额</th>
                 <th className="py-3 px-2"></th>
@@ -59,7 +60,7 @@ export default function TransactionList() {
                 <TransactionRow
                   key={tx.id}
                   tx={tx}
-                  onTagClick={(t) => setEditingTx(t)}
+                  onEditClick={(t) => setEditingTx(t)}
                 />
               ))}
             </tbody>
@@ -67,11 +68,10 @@ export default function TransactionList() {
         </div>
       )}
 
-      <TagEditor
+      <TransactionEditor
         open={editingTx !== null}
-        txId={editingTx?.id || null}
+        tx={editingTx}
         onClose={() => setEditingTx(null)}
-        onSaved={() => queryClient.invalidateQueries({ queryKey: ['transactions'] })}
       />
     </div>
   )

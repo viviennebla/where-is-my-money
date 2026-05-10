@@ -5,6 +5,7 @@ export const TX_TYPE_LABELS: Record<string, string> = {
   income: '收入',
   transfer: '转账',
   refund: '退款',
+  balance_adjustment: '余额调整',
 }
 
 export const TX_TYPE_COLORS: Record<string, string> = {
@@ -12,6 +13,7 @@ export const TX_TYPE_COLORS: Record<string, string> = {
   income: 'text-green-600',
   transfer: 'text-blue-600',
   refund: 'text-orange-600',
+  balance_adjustment: 'text-gray-600',
 }
 
 export const ACCOUNT_TYPE_LABELS: Record<string, string> = {

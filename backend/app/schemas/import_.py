@@ -50,6 +50,7 @@ class PaymentMethodSuggestion(BaseModel):
     suggested_account_id: str | None = None
     suggested_account_name: str | None = None
     all_accounts: list[AccountBrief] = []
+    sample_rows: list[dict[str, str]] = []
 
 
 class ExtractPaymentMethodsResponse(BaseModel):
@@ -71,6 +72,16 @@ class AiMatchAccountsResponse(BaseModel):
     notes: str
 
 
+class PreviewParsedRequest(BaseModel):
+    file_id: str
+    field_mapping: dict[str, str] | None = None
+
+
+class PreviewParsedResponse(BaseModel):
+    headers: list[str]
+    rows: list[dict[str, str]]
+
+
 class ExecuteRequest(BaseModel):
     file_id: str
     template_id: str | None = None
@@ -81,3 +92,4 @@ class ExecuteResponse(BaseModel):
     created: int
     updated: int
     total: int
+    matched_refunds: int = 0

@@ -25,6 +25,8 @@ class Account(Base):
     account_type: Mapped[AccountType] = mapped_column(Enum(AccountType), default=AccountType.BANK_CARD, nullable=False)
     initial_balance: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"))
     current_balance: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"))
+    alias: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    card_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

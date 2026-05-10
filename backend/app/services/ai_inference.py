@@ -20,7 +20,7 @@ Rules:
 - If a column contains amounts and there is a separate "income/expense" indicator, map amount to "amount" and the direction indicator helps determine type
 - If there are separate "income" and "expense" amount columns, note that in your reasoning
 - Look for column names like: 交易时间, 金额, 商户名称, 商品描述, 订单号, 商户单号, 当前状态, 交易类型, etc.
-- type should be inferred as: "expense" for spending, "income" for receiving money
+- type should be inferred as: "expense" for spending, "income" for receiving money, "refund" if transaction_status or source_category contains 退款
 
 Return ONLY valid JSON with this exact schema:
 {

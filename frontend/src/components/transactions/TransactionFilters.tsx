@@ -22,7 +22,7 @@ export default function TransactionFilters() {
           type="text"
           value={search || ''}
           onChange={(e) => setSearch(e.target.value || null)}
-          placeholder="搜索商户、描述..."
+          placeholder="搜索交易对象、描述..."
           className="text-sm border border-gray-300 rounded-lg px-3 py-2 w-48"
         />
 

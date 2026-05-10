@@ -24,11 +24,12 @@ from app.schemas.import_ import (
     ExtractPaymentMethodsRequest, ExtractPaymentMethodsResponse,
     PaymentMethodSuggestion, AccountBrief, SaveBindingsRequest,
     AiMatchAccountsRequest, AiMatchAccountsResponse,
+    PreviewParsedRequest, PreviewParsedResponse,
 )
 from app.utils.file_parser import find_header_row, parse_file_data, parse_file_preview
 from app.utils.sanitizer import sanitize_for_ai
 from app.services.ai_inference import infer_column_mapping, infer_account_matching
-from app.services.merge_engine import upsert_transactions
+from app.services.merge_engine import upsert_transactions, match_refunds
 from app.encryption import get_user_api_key
 
 router = APIRouter(prefix="/api/v1/import", tags=["import"])
@@ -237,6 +238,48 @@ async def confirm_mapping(
     )
 
 
+@router.post("/preview-parsed", response_model=PreviewParsedResponse)
+async def preview_parsed(
+    body: PreviewParsedRequest,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ImportSession).where(
+            ImportSession.id == body.file_id,
+            ImportSession.user_id == user_id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    field_mapping = body.field_mapping or session.field_mapping or {}
+
+    with open(session.file_path, "rb") as f:
+        content = f.read()
+
+    all_headers, data_rows = parse_file_data(
+        session.filename, content, session.header_row_index
+    )
+
+    # Apply field_mapping to first 10 rows
+    preview_rows = []
+    for row in data_rows[:10]:
+        mapped = {}
+        for src_col, std_field in field_mapping.items():
+            try:
+                col_idx = all_headers.index(src_col)
+                if col_idx < len(row):
+                    mapped[std_field] = str(row[col_idx]).strip()
+            except ValueError:
+                continue
+        if mapped:
+            preview_rows.append(mapped)
+
+    return PreviewParsedResponse(headers=list(field_mapping.values()), rows=preview_rows)
+
+
 @router.post("/extract-payment-methods", response_model=ExtractPaymentMethodsResponse)
 async def extract_payment_methods(
     body: ExtractPaymentMethodsRequest,
@@ -279,13 +322,17 @@ async def extract_payment_methods(
         except ValueError:
             return ExtractPaymentMethodsResponse(column_name=payment_col, methods=[])
 
-    # Count occurrences
+    # Count occurrences and collect sample rows
     counts: dict[str, int] = {}
+    samples: dict[str, list[dict[str, str]]] = {}
     for row in data_rows:
         if col_idx < len(row):
             val = str(row[col_idx]).strip()
             if val:
                 counts[val] = counts.get(val, 0) + 1
+                if len(samples.get(val, [])) < 3:
+                    row_dict = {all_headers[i]: str(cell) for i, cell in enumerate(row) if i < len(all_headers)}
+                    samples.setdefault(val, []).append(row_dict)
 
     # Get user's accounts for suggestions
     acc_result = await db.execute(
@@ -304,6 +351,7 @@ async def extract_payment_methods(
             suggested_account_id=sug_id,
             suggested_account_name=sug_name,
             all_accounts=account_briefs,
+            sample_rows=samples.get(method, []),
         ))
 
     return ExtractPaymentMethodsResponse(column_name=payment_col, methods=methods)
@@ -480,6 +528,12 @@ async def execute_import(
             except ValueError:
                 continue
 
+        # Normalize field names: AI mapping uses "amount"/"currency" but model uses "original_amount"/"original_currency"
+        if "amount" in rec and "original_amount" not in rec:
+            rec["original_amount"] = rec.pop("amount")
+        if "currency" in rec and "original_currency" not in rec:
+            rec["original_currency"] = rec.pop("currency")
+
         # Apply account binding
         account_id = None
         if payment_col_idx is not None and account_binding:
@@ -521,6 +575,12 @@ async def execute_import(
             except ValueError:
                 rec["type"] = TransactionType.EXPENSE
 
+        # Override type to refund if transaction_status or source_category contains 退款
+        if "transaction_status" in rec and "退款" in str(rec.get("transaction_status", "")):
+            rec["type"] = TransactionType.REFUND
+        elif "source_category" in rec and "退款" in str(rec.get("source_category", "")):
+            rec["type"] = TransactionType.REFUND
+
         if "account_id" not in rec:
             continue
 
@@ -528,11 +588,14 @@ async def execute_import(
 
     upsert_result = await upsert_transactions(db, user_id, records)
 
+    matched_refunds = await match_refunds(db, user_id)
+
     session.status = "completed"
     await db.commit()
 
     return ExecuteResponse(
         created=upsert_result["created"],
         updated=upsert_result["updated"],
+        matched_refunds=matched_refunds,
         total=len(records),
     )
