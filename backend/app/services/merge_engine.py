@@ -141,9 +141,10 @@ async def match_refunds(session: AsyncSession, user_id: str) -> int:
             )
             match = match_result.scalar_one_or_none()
 
-        # Strategy 2: same merchant_name + same amount within 30-day window
-        if not match and refund.merchant_name and refund.merchant_order_id is None:
+        # Strategy 2: same merchant_name + same amount within 30-day window (also try when order_id exists but didn't match)
+        if not match and refund.merchant_name:
             window_start = refund.transaction_date - timedelta(days=30)
+            window_end = refund.transaction_date + timedelta(hours=2)
             match_result = await session.execute(
                 select(Transaction).where(
                     Transaction.user_id == user_id,
@@ -151,11 +152,34 @@ async def match_refunds(session: AsyncSession, user_id: str) -> int:
                     Transaction.merchant_name == refund.merchant_name,
                     Transaction.original_amount == refund.original_amount,
                     Transaction.transaction_date >= window_start,
-                    Transaction.transaction_date <= refund.transaction_date,
+                    Transaction.transaction_date <= window_end,
                     Transaction.id != refund.id,
                 ).order_by(Transaction.transaction_date.desc()).limit(1)
             )
             match = match_result.scalar_one_or_none()
+
+        # Strategy 3: fuzzy merchant name (substring) + same amount within 30-day window
+        if not match and refund.merchant_name:
+            window_start = refund.transaction_date - timedelta(days=30)
+            window_end = refund.transaction_date + timedelta(hours=2)
+            candidates = await session.execute(
+                select(Transaction).where(
+                    Transaction.user_id == user_id,
+                    Transaction.type == TransactionType.EXPENSE,
+                    Transaction.original_amount == refund.original_amount,
+                    Transaction.transaction_date >= window_start,
+                    Transaction.transaction_date <= window_end,
+                    Transaction.id != refund.id,
+                    Transaction.merchant_name.isnot(None),
+                ).order_by(Transaction.transaction_date.desc()).limit(50)
+            )
+            refund_name = refund.merchant_name.lower().replace('平台商户', '').strip()
+            for c in candidates.scalars().all():
+                c_name = (c.merchant_name or '').lower()
+                if len(c_name) >= 2 and len(refund_name) >= 2:
+                    if c_name in refund.merchant_name.lower() or refund_name in c_name:
+                        match = c
+                        break
 
         if match:
             refund.parent_id = match.id
