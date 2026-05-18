@@ -7,8 +7,10 @@ from app.database import get_db
 from app.auth import get_current_user
 from app.models.transaction import Transaction, TransactionType
 from app.models.transaction_tag import TransactionTag
+from app.models.tag import Tag
 from app.models.account import Account
 from app.schemas.transaction import TransactionCreate, TransactionUpdate, TransactionResponse, TransactionListResponse
+from app.schemas.tag import TagResponse
 from app.services.balance_calculator import apply_balance, reverse_balance
 
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
@@ -69,6 +71,7 @@ async def list_transactions(
     query = query.options(
         selectinload(Transaction.account),
         selectinload(Transaction.transfer_account),
+        selectinload(Transaction.tags).selectinload(TransactionTag.tag),
     ).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     items = result.unique().scalars().all()
@@ -122,8 +125,33 @@ async def create_transaction(
 
     await apply_balance(db, tx)
     await db.commit()
-    await db.refresh(tx)
-    return tx
+
+    # Build response from explicit queries (avoids lazy-loading issues)
+    tag_result = await db.execute(
+        select(Tag).select_from(TransactionTag).join(Tag)
+        .where(TransactionTag.transaction_id == tx.id)
+    )
+    tags = [TagResponse.model_validate(t) for t in tag_result.scalars().all()]
+
+    acc = await db.get(Account, tx.account_id)
+    transfer_acc = await db.get(Account, tx.transfer_account_id) if tx.transfer_account_id else None
+
+    return TransactionResponse(
+        id=tx.id, type=tx.type,
+        original_currency=tx.original_currency, original_amount=tx.original_amount,
+        base_currency=tx.base_currency, base_amount=tx.base_amount,
+        account_id=tx.account_id, account_name=acc.name if acc else '',
+        transfer_account_id=tx.transfer_account_id,
+        transfer_account_name=transfer_acc.name if transfer_acc else None,
+        parent_id=tx.parent_id, merchant_name=tx.merchant_name,
+        description=tx.description, remark=tx.remark,
+        external_tx_id=tx.external_tx_id, external_source=tx.external_source,
+        merchant_order_id=tx.merchant_order_id,
+        transaction_status=tx.transaction_status, source_category=tx.source_category,
+        transaction_date=tx.transaction_date,
+        created_at=tx.created_at, updated_at=tx.updated_at,
+        tags=tags,
+    )
 
 
 @router.put("/{transaction_id}", response_model=TransactionResponse)
@@ -193,6 +221,7 @@ async def update_transaction(
         )
         for tt in existing.scalars().all():
             await db.delete(tt)
+        await db.flush()
         for tag_id in body.tag_ids:
             db.add(TransactionTag(transaction_id=tx.id, tag_id=tag_id))
 
@@ -200,8 +229,32 @@ async def update_transaction(
         await apply_balance(db, tx)
 
     await db.commit()
-    await db.refresh(tx)
-    return tx
+
+    tag_result = await db.execute(
+        select(Tag).select_from(TransactionTag).join(Tag)
+        .where(TransactionTag.transaction_id == tx.id)
+    )
+    tags = [TagResponse.model_validate(t) for t in tag_result.scalars().all()]
+
+    acc = await db.get(Account, tx.account_id)
+    transfer_acc = await db.get(Account, tx.transfer_account_id) if tx.transfer_account_id else None
+
+    return TransactionResponse(
+        id=tx.id, type=tx.type,
+        original_currency=tx.original_currency, original_amount=tx.original_amount,
+        base_currency=tx.base_currency, base_amount=tx.base_amount,
+        account_id=tx.account_id, account_name=acc.name if acc else '',
+        transfer_account_id=tx.transfer_account_id,
+        transfer_account_name=transfer_acc.name if transfer_acc else None,
+        parent_id=tx.parent_id, merchant_name=tx.merchant_name,
+        description=tx.description, remark=tx.remark,
+        external_tx_id=tx.external_tx_id, external_source=tx.external_source,
+        merchant_order_id=tx.merchant_order_id,
+        transaction_status=tx.transaction_status, source_category=tx.source_category,
+        transaction_date=tx.transaction_date,
+        created_at=tx.created_at, updated_at=tx.updated_at,
+        tags=tags,
+    )
 
 
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)

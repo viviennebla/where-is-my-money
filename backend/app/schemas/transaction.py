@@ -1,8 +1,9 @@
 from decimal import Decimal
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.models.transaction import TransactionType
+from app.schemas.tag import TagResponse
 
 
 class TransactionCreate(BaseModel):
@@ -70,6 +71,20 @@ class TransactionResponse(BaseModel):
     transaction_date: datetime
     created_at: datetime
     updated_at: datetime
+    tags: list[TagResponse] = []
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _extract_tags(cls, v):
+        if v is None or not v:
+            return []
+        first = v[0]
+        if isinstance(first, TagResponse):
+            return v  # already validated
+        if isinstance(first, dict):
+            return v  # already serialized dicts from model_dump
+        # ORM TransactionTag objects — extract .tag
+        return [TagResponse.model_validate(item.tag) for item in v]
 
     model_config = {"from_attributes": True}
 

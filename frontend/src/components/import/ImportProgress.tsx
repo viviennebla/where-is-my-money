@@ -1,15 +1,25 @@
 import { useState } from 'react'
 import api from '../../api/client'
+import ProgressBar from '../ProgressBar'
+
+export interface ImportResult {
+  created: number
+  updated: number
+  total: number
+  matched_refunds?: number
+  diffs?: Array<{transaction_id: string; field: string; old: string; new: string}>
+}
 
 interface Props {
   fileId: string
   accountBindings: Record<string, string> | null
-  onDone: (result: { created: number; updated: number; total: number }) => void
+  onDone: (result: ImportResult) => void
 }
 
 export default function ImportProgress({ fileId, accountBindings, onDone }: Props) {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
+  const [taskId, setTaskId] = useState<string | null>(null)
 
   const execute = async () => {
     setRunning(true)
@@ -19,12 +29,29 @@ export default function ImportProgress({ fileId, accountBindings, onDone }: Prop
         file_id: fileId,
         account_binding: accountBindings,
       })
-      onDone(res.data)
+      setTaskId(res.data.task_id)
     } catch {
       setError('导入执行失败，请重试')
-    } finally {
       setRunning(false)
     }
+  }
+
+  if (taskId) {
+    return (
+      <ProgressBar
+        taskId={taskId}
+        label="正在导入"
+        onDone={(result) => {
+          if (result) {
+            onDone({ created: result.created, updated: result.updated, total: 0, matched_refunds: result.matched_refunds, diffs: result.diffs })
+          }
+        }}
+        onError={(err) => {
+          setError(err)
+          setRunning(false)
+        }}
+      />
+    )
   }
 
   return (

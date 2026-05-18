@@ -29,6 +29,12 @@ export default function Navbar() {
           <Link to="/import" className={linkClass('/import')}>
             导入
           </Link>
+          <Link to="/tags" className={linkClass('/tags')}>
+            标签
+          </Link>
+          <Link to="/tag-rules" className={linkClass('/tag-rules')}>
+            匹配规则
+          </Link>
           <Link to="/settings" className={linkClass('/settings')}>
             设置
           </Link>

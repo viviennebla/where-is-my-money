@@ -22,4 +22,4 @@ class Tag(Base):
 
     user = relationship("User", back_populates="tags")
     parent = relationship("Tag", remote_side=[id], backref="children")
-    transactions = relationship("TransactionTag", back_populates="tag", lazy="dynamic")
+    transactions = relationship("TransactionTag", back_populates="tag", lazy="selectin")

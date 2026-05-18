@@ -5,15 +5,10 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction, TransactionType
+from app.services.balance_calculator import apply_balance
 
 FUZZY_WINDOW_HOURS = 24
 
-
-def _non_null(a, b):
-    """Pick non-null value, preferring the richer one (longer string for descriptions)."""
-    if a and b:
-        return a if len(a) >= len(b) else b
-    return a or b
 
 
 async def upsert_transactions(
@@ -24,10 +19,11 @@ async def upsert_transactions(
     """
     Upsert transactions with dedup logic.
     Each record dict must have keys matching Transaction fields.
-    Returns {created: N, updated: M}.
+    Returns {created: N, updated: M, diffs: [...]}.
     """
     created = 0
     updated = 0
+    all_diffs = []
 
     for rec in records:
         # Override type to refund if status/category indicates it
@@ -36,10 +32,19 @@ async def upsert_transactions(
         elif rec.get("source_category") and "退款" in str(rec["source_category"]):
             rec["type"] = TransactionType.REFUND
 
+        # Combine source_category into merchant_name for richer display
+        sc = rec.get("source_category")
+        mn = rec.get("merchant_name")
+        if sc and mn:
+            rec["merchant_name"] = f"{sc} · {mn}"
+        elif sc and not mn:
+            rec["merchant_name"] = sc
+
         existing = await _find_match(session, user_id, rec)
 
         if existing:
-            await _merge(session, existing, rec)
+            diffs = await _merge(session, existing, rec)
+            all_diffs.extend(diffs)
             updated += 1
         else:
             tx = Transaction(
@@ -48,10 +53,11 @@ async def upsert_transactions(
                 **rec,
             )
             session.add(tx)
+            await apply_balance(session, tx)
             created += 1
 
     await session.commit()
-    return {"created": created, "updated": updated}
+    return {"created": created, "updated": updated, "diffs": all_diffs}
 
 
 async def _find_match(session: AsyncSession, user_id: str, rec: dict) -> Transaction | None:
@@ -90,18 +96,26 @@ async def _find_match(session: AsyncSession, user_id: str, rec: dict) -> Transac
     return None
 
 
-async def _merge(session: AsyncSession, existing: Transaction, rec: dict):
-    """Merge non-null fields from rec into existing, with enrichment strategy."""
+async def _merge(session: AsyncSession, existing: Transaction, rec: dict) -> list[dict]:
+    """Merge non-null fields from rec into existing (fill blanks only).
+    When both old and new have values but new is richer, record as diff instead of overwriting."""
+    diffs = []
     for field in ("merchant_name", "description", "remark", "external_tx_id", "external_source",
                   "merchant_order_id", "transaction_status", "source_category"):
         new_val = rec.get(field)
         old_val = getattr(existing, field, None)
-        if new_val and old_val:
-            setattr(existing, field, _non_null(old_val, new_val))
-        elif new_val:
+        if new_val and not old_val:
             setattr(existing, field, new_val)
+        elif new_val and old_val and len(new_val) > len(old_val):
+            diffs.append({
+                "transaction_id": existing.id,
+                "field": field,
+                "old": old_val,
+                "new": new_val,
+            })
 
     existing.updated_at = datetime.utcnow()
+    return diffs
 
 
 async def match_refunds(session: AsyncSession, user_id: str) -> int:

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.auth import get_current_user
 from app.models.tag import Tag
+from app.models.transaction_tag import TransactionTag
 from app.schemas.tag import TagCreate, TagUpdate, TagResponse
 
 router = APIRouter(prefix="/api/v1/tags", tags=["tags"])
@@ -28,6 +29,7 @@ SYSTEM_TAGS = [
     {"name": "转账", "emoji": "💸"},
     {"name": "收入", "emoji": "💰"},
     {"name": "退款", "emoji": "↩️"},
+    {"name": "日常消费", "emoji": "💳"},
 ]
 
 
@@ -111,3 +113,26 @@ async def update_tag(
     await db.commit()
     await db.refresh(tag)
     return tag
+
+
+@router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tag(
+    tag_id: str,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Tag).where(Tag.id == tag_id, Tag.user_id == user_id, Tag.is_system_default == False)
+    )
+    tag = result.scalar_one_or_none()
+    if not tag:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found or is system default")
+
+    txs = await db.execute(
+        select(TransactionTag).where(TransactionTag.tag_id == tag_id)
+    )
+    for tt in txs.scalars().all():
+        await db.delete(tt)
+
+    await db.delete(tag)
+    await db.commit()

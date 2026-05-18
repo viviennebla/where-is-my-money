@@ -20,3 +20,18 @@ class TemplateResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TemplateUpdate(BaseModel):
+    platform_name: str
+    field_mapping: dict[str, str]
+
+
+class TemplateSaveAs(BaseModel):
+    platform_name: str
+    field_mapping: dict[str, str]
+
+
+class ReapplyResponse(BaseModel):
+    task_id: str
+    total_sessions: int

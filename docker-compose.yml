@@ -3,8 +3,8 @@ services:
     image: wimm-backend:dev
     ports: ["8000:8000"]
     volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
+      - ${HOST_PROJECT_ROOT:-.}/data:/app/data
+      - ${HOST_PROJECT_ROOT:-.}/uploads:/app/uploads
     env_file: .env
     environment:
       - DEEPSEEK_BASE_URL=https://api.deepseek.com/anthropic

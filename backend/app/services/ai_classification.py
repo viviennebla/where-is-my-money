@@ -1,28 +1,29 @@
 import json
-import httpx
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.models.tag import Tag
+from app.models.tag_rule import TagRule
 from app.models.transaction_tag import TransactionTag
 from app.models.transaction import Transaction
+from app.services.ai_inference import _call_deepseek
+from app.routers.tag_rules import seed_default_tag_rules
 
-CLASSIFY_PROMPT = """You are a transaction classifier. Classify the given transaction into 1-3 tags.
+CLASSIFY_PROMPT = """Classify the given transaction into 1-3 tags.
 
 Rules (in priority order):
 1. First, pick from the provided existing tags list if any match.
-2. Only if NO existing tag fits, you may create a new tag with a short name (≤4 characters).
+2. Only if NO existing tag fits, you may create a new tag with a short name (<=4 characters).
 3. Return ONLY valid JSON.
 
 Existing tags (id -> name):
 {tags_list}
 
 Return JSON schema:
-{
-  "tags": [{"tag_id": "xxx", "name": "tag_name"}, ...],
+{{
+  "tags": [{{"tag_id": "xxx", "name": "tag_name"}}, ...],
   "is_new": [true/false, ...]
-}"""
+}}"""
 
 
 async def _get_available_tags(db: AsyncSession, user_id: str) -> list[Tag]:
@@ -52,8 +53,38 @@ async def _find_local_rules(db: AsyncSession, tx: Transaction) -> str | None:
     return row.tag_id if row else None
 
 
-async def classify_transaction(db: AsyncSession, tx: Transaction, api_key: str) -> list[dict]:
-    """Classify a transaction. Returns list of {tag_id, name}."""
+async def _match_keyword_tags(db: AsyncSession, tx: Transaction) -> list[dict]:
+    """Match tags based on configured keyword rules (DB-backed). Returns [{tag_id, name}]."""
+    await seed_default_tag_rules(db)
+
+    rules_result = await db.execute(
+        select(TagRule).where(
+            or_(TagRule.user_id == tx.user_id, TagRule.is_system_default == True)
+        )
+    )
+    rules = rules_result.scalars().all()
+
+    matched_tag_ids: set[str] = set()
+    for rule in rules:
+        field_value = getattr(tx, rule.field, None) or ''
+        if rule.keyword in field_value:
+            matched_tag_ids.add(rule.tag_id)
+
+    if not matched_tag_ids:
+        return []
+
+    tags_result = await db.execute(
+        select(Tag).where(Tag.id.in_(list(matched_tag_ids)))
+    )
+    tags = tags_result.scalars().all()
+    return [{"tag_id": t.id, "name": t.name} for t in tags]
+
+
+async def classify_transaction(db: AsyncSession, tx: Transaction, api_key: str | None = None) -> list[dict]:
+    """Classify a transaction. Returns list of {tag_id, name}.
+
+    Uses local history first, then keyword matching, then AI fallback (only if api_key is set).
+    """
     user_id = tx.user_id
 
     local_tag_id = await _find_local_rules(db, tx)
@@ -62,41 +93,21 @@ async def classify_transaction(db: AsyncSession, tx: Transaction, api_key: str) 
         if tag:
             return [{"tag_id": tag.id, "name": tag.name}]
 
+    keyword_tags = await _match_keyword_tags(db, tx)
+    if keyword_tags:
+        return keyword_tags
+
+    if not api_key:
+        return []
+
     available_tags = await _get_available_tags(db, user_id)
     tags_list = "\n".join([f"- {t.id}: {t.name}" for t in available_tags])
 
-    payload = {
-        "model": settings.DEEPSEEK_FLASH_MODEL,
-        "max_tokens": 512,
-        "messages": [
-            {
-                "role": "system",
-                "content": CLASSIFY_PROMPT.format(tags_list=tags_list),
-            },
-            {
-                "role": "user",
-                "content": f"Merchant: {tx.merchant_name or 'N/A'}\nDescription: {tx.description or 'N/A'}\nType: {tx.type.value}",
-            },
-        ],
-        "response_format": {"type": "json_object"},
-    }
+    # Merge system prompt into user message since DeepSeek rejects system role
+    user_message = CLASSIFY_PROMPT.format(tags_list=tags_list) + \
+        f"\n\nTransaction:\nMerchant: {tx.merchant_name or 'N/A'}\nDescription: {tx.description or 'N/A'}\nType: {tx.type.value}"
 
-    headers_dict = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01",
-    }
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            f"{settings.DEEPSEEK_BASE_URL}/v1/messages",
-            json=payload,
-            headers=headers_dict,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-    content = data["content"][0]["text"]
-    result = json.loads(content)
+    raw_response = await _call_deepseek(user_message, api_key)
+    result = json.loads(raw_response)
 
     return result.get("tags", [])

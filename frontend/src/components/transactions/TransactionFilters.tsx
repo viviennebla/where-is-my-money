@@ -1,18 +1,27 @@
 import { useQuery } from '@tanstack/react-query'
 import { useFilterStore } from '../../stores/filterStore'
 import { TX_TYPE_LABELS } from '../../lib/constants'
-import { Account } from '../../lib/types'
+import { Account, Tag } from '../../lib/types'
 import api from '../../api/client'
 
-export default function TransactionFilters() {
+interface Props {
+  hideAccountFilter?: boolean
+}
+
+export default function TransactionFilters({ hideAccountFilter }: Props) {
   const {
-    type, accountId, dateFrom, dateTo, search, sortBy, sortOrder,
-    setType, setAccountId, setDateRange, setSearch, setSortBy, setSortOrder, reset,
+    type, accountId, tagId, dateFrom, dateTo, search, sortBy, sortOrder,
+    setType, setAccountId, setTagId, setDateRange, setSearch, setSortBy, setSortOrder, reset,
   } = useFilterStore()
 
   const { data: accounts } = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn: () => api.get('/accounts').then((r) => r.data),
+  })
+
+  const { data: tags } = useQuery<Tag[]>({
+    queryKey: ['tags'],
+    queryFn: () => api.get('/tags').then((r) => r.data),
   })
 
   return (
@@ -37,14 +46,27 @@ export default function TransactionFilters() {
           ))}
         </select>
 
+        {!hideAccountFilter && (
+          <select
+            value={accountId || ''}
+            onChange={(e) => setAccountId(e.target.value || null)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white"
+          >
+            <option value="">全部账户</option>
+            {accounts?.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        )}
+
         <select
-          value={accountId || ''}
-          onChange={(e) => setAccountId(e.target.value || null)}
+          value={tagId || ''}
+          onChange={(e) => setTagId(e.target.value || null)}
           className="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white"
         >
-          <option value="">全部账户</option>
-          {accounts?.map((a) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
+          <option value="">全部标签</option>
+          {tags?.map((t) => (
+            <option key={t.id} value={t.id}>{t.emoji} {t.name}</option>
           ))}
         </select>
 

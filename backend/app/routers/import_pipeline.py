@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 import os
@@ -9,15 +10,15 @@ from decimal import Decimal
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.database import get_db
+from app.database import get_db, engine
 from app.auth import get_current_user
 from app.config import settings
 from app.models.import_template import ImportTemplate
 from app.models.import_session import ImportSession
 from app.models.account import Account
-from app.models.transaction import TransactionType
+from app.models.transaction import Transaction, TransactionType
 from app.schemas.import_ import (
     UploadResponse, InferRequest, InferResponse,
     ConfirmRequest, ConfirmResponse, ExecuteRequest, ExecuteResponse,
@@ -29,7 +30,10 @@ from app.schemas.import_ import (
 from app.utils.file_parser import find_header_row, parse_file_data, parse_file_preview
 from app.utils.sanitizer import sanitize_for_ai
 from app.services.ai_inference import infer_column_mapping, infer_account_matching
+from app.models.transaction_tag import TransactionTag
+from app.services.ai_classification import classify_transaction
 from app.services.merge_engine import upsert_transactions, match_refunds
+from app.services.task_manager import task_manager
 from app.encryption import get_user_api_key
 
 router = APIRouter(prefix="/api/v1/import", tags=["import"])
@@ -477,7 +481,7 @@ async def ai_match_accounts(
     )
 
 
-@router.post("/execute", response_model=ExecuteResponse)
+@router.post("/execute")
 async def execute_import(
     body: ExecuteRequest,
     user_id: str = Depends(get_current_user),
@@ -511,12 +515,13 @@ async def execute_import(
     payment_col = _find_payment_column(headers, field_mapping)
     payment_col_idx = headers.index(payment_col) if payment_col and payment_col in headers else None
 
-    # Get default account (first active account)
+    # Get default account
     acc_result = await db.execute(
         select(Account.id).where(Account.user_id == user_id, Account.is_active == True).limit(1)
     )
     default_acc_id = acc_result.scalar_one_or_none()
 
+    # Build records list
     records = []
     for row in data_rows:
         rec = {}
@@ -528,13 +533,11 @@ async def execute_import(
             except ValueError:
                 continue
 
-        # Normalize field names: AI mapping uses "amount"/"currency" but model uses "original_amount"/"original_currency"
         if "amount" in rec and "original_amount" not in rec:
             rec["original_amount"] = rec.pop("amount")
         if "currency" in rec and "original_currency" not in rec:
             rec["original_currency"] = rec.pop("currency")
 
-        # Apply account binding
         account_id = None
         if payment_col_idx is not None and account_binding:
             payment_val = str(row[payment_col_idx]).strip() if payment_col_idx < len(row) else ""
@@ -544,7 +547,6 @@ async def execute_import(
         if account_id:
             rec["account_id"] = account_id
 
-        # Date parsing
         if "transaction_date" in rec:
             try:
                 rec["transaction_date"] = datetime.fromisoformat(rec["transaction_date"])
@@ -554,7 +556,6 @@ async def execute_import(
                 except (ValueError, TypeError):
                     rec["transaction_date"] = datetime.utcnow()
 
-        # Amount parsing
         if "original_amount" in rec:
             try:
                 rec["original_amount"] = Decimal(str(rec["original_amount"]).replace(",", "").replace("¥", ""))
@@ -568,14 +569,12 @@ async def execute_import(
         elif "original_amount" in rec:
             rec["base_amount"] = rec["original_amount"]
 
-        # Type parsing
         if "type" in rec:
             try:
                 rec["type"] = TransactionType(rec["type"].lower())
             except ValueError:
                 rec["type"] = TransactionType.EXPENSE
 
-        # Override type to refund if transaction_status or source_category contains 退款
         if "transaction_status" in rec and "退款" in str(rec.get("transaction_status", "")):
             rec["type"] = TransactionType.REFUND
         elif "source_category" in rec and "退款" in str(rec.get("source_category", "")):
@@ -586,16 +585,77 @@ async def execute_import(
 
         records.append(rec)
 
-    upsert_result = await upsert_transactions(db, user_id, records)
-
-    matched_refunds = await match_refunds(db, user_id)
-
     session.status = "completed"
     await db.commit()
 
-    return ExecuteResponse(
-        created=upsert_result["created"],
-        updated=upsert_result["updated"],
-        matched_refunds=matched_refunds,
-        total=len(records),
-    )
+    task_id = task_manager.create("import", len(records))
+    asyncio.create_task(_run_import(task_id, user_id, records, session.id))
+
+    return {"task_id": task_id, "total": len(records)}
+
+
+async def _run_import(task_id: str, user_id: str, records: list[dict], session_id: str):
+    """Background: upsert transactions with progress tracking."""
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+    try:
+        async with async_session() as db:
+            # Process in batches of 50 for progress
+            batch_size = 50
+            total_created = 0
+            total_updated = 0
+
+            all_diffs = []
+            for i in range(0, len(records), batch_size):
+                batch = records[i : i + batch_size]
+                result = await upsert_transactions(db, user_id, batch)
+                total_created += result["created"]
+                total_updated += result["updated"]
+                all_diffs.extend(result.get("diffs", []))
+                task_manager.update(task_id, min(i + batch_size, len(records)))
+
+            matched_refunds = await match_refunds(db, user_id)
+
+            # Auto-classify new transactions with progress reporting
+            if total_created > 0:
+                task_manager.set_message(task_id, "正在智能匹配标签...")
+                api_key = await get_user_api_key(db, user_id)
+                untagged_result = await db.execute(
+                    select(Transaction)
+                    .outerjoin(TransactionTag)
+                    .where(Transaction.user_id == user_id, TransactionTag.id == None)
+                )
+                untagged_txs = untagged_result.unique().scalars().all()
+                tagged_count = 0
+                for idx, utx in enumerate(untagged_txs):
+                    try:
+                        tags = await classify_transaction(db, utx, api_key)
+                        for t in tags:
+                            db.add(TransactionTag(transaction_id=utx.id, tag_id=t["tag_id"]))
+                        if tags:
+                            tagged_count += 1
+                    except Exception:
+                        pass
+                    if (idx + 1) % 10 == 0:
+                        task_manager.set_message(task_id, f"正在智能匹配标签... ({idx + 1}/{len(untagged_txs)})")
+                if untagged_txs:
+                    await db.commit()
+
+            task_manager.complete(task_id, {
+                "created": total_created,
+                "updated": total_updated,
+                "matched_refunds": matched_refunds,
+                "diffs": all_diffs,
+            })
+    except Exception as e:
+        task_manager.fail(task_id, str(e))
+        # Restore session status so user can retry
+        try:
+            async with async_session() as db:
+                result = await db.execute(select(ImportSession).where(ImportSession.id == session_id))
+                s = result.scalar_one_or_none()
+                if s:
+                    s.status = "binding_done"
+                    await db.commit()
+        except Exception:
+            pass

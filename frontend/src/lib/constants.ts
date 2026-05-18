@@ -1,5 +1,19 @@
 export const API_BASE = '/api/v1'
 
+export const STANDARD_FIELDS = [
+  { value: 'transaction_date', label: '交易时间' },
+  { value: 'type', label: '收/支' },
+  { value: 'merchant_name', label: '交易对方' },
+  { value: 'description', label: '商品描述' },
+  { value: 'original_amount', label: '金额' },
+  { value: 'source_category', label: '交易类型' },
+  { value: 'transaction_status', label: '当前状态' },
+  { value: 'external_tx_id', label: '交易单号' },
+  { value: 'merchant_order_id', label: '商户单号' },
+  { value: 'account_id', label: '支付方式' },
+  { value: 'remark', label: '备注' },
+]
+
 export const TX_TYPE_LABELS: Record<string, string> = {
   expense: '支出',
   income: '收入',

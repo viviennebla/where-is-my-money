@@ -36,6 +36,7 @@ export interface Transaction {
   transaction_date: string
   created_at: string
   updated_at: string
+  tags?: Tag[]
 }
 
 export interface Tag {
@@ -45,6 +46,22 @@ export interface Tag {
   parent_id: string | null
   is_system_default: boolean
   created_at: string
+}
+
+export interface TagRule {
+  id: string
+  user_id: string | null
+  field: string
+  keyword: string
+  tag_id: string
+  tag?: Tag
+  is_system_default: boolean
+  created_at: string
+}
+
+export interface TransactionListResponse {
+  items: Transaction[]
+  total: number
 }
 
 export interface ImportTemplate {

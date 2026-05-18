@@ -9,27 +9,9 @@ from app.services.merge_engine import (
     upsert_transactions,
     _find_match,
     _merge,
-    _non_null,
     FUZZY_WINDOW_HOURS,
 )
 from app.models.transaction import Transaction, TransactionType
-
-
-class TestNonNull:
-    def test_both_non_null_prefer_longer(self):
-        assert _non_null("Hi", "Hello world") == "Hello world"
-
-    def test_first_none(self):
-        assert _non_null(None, "Hello") == "Hello"
-
-    def test_second_none(self):
-        assert _non_null("Hello", None) == "Hello"
-
-    def test_both_none(self):
-        assert _non_null(None, None) is None
-
-    def test_equal_length(self):
-        assert _non_null("abc", "xyz") == "abc"
 
 
 def _result_mock(return_value):
@@ -94,6 +76,7 @@ class TestMerge:
     @pytest.mark.asyncio
     async def test_merge_enriches_with_richer_description(self):
         existing = MagicMock(spec=Transaction)
+        existing.id = "tx-1"
         existing.merchant_name = "Old"
         existing.description = "Short"
         existing.remark = None
@@ -108,14 +91,19 @@ class TestMerge:
             "external_source": None,
         }
 
-        await _merge(mock_session := AsyncMock(), existing, rec)
-        assert existing.merchant_name == "New Name"
-        assert existing.description == "A much longer description than before"
+        diffs = await _merge(mock_session := AsyncMock(), existing, rec)
+        # Old values had content, new values are richer → should be recorded as diffs, NOT applied
+        assert existing.merchant_name == "Old"
+        assert existing.description == "Short"
         assert existing.updated_at is not None
+        assert len(diffs) == 2
+        assert diffs[0] == {"transaction_id": "tx-1", "field": "merchant_name", "old": "Old", "new": "New Name"}
+        assert diffs[1] == {"transaction_id": "tx-1", "field": "description", "old": "Short", "new": "A much longer description than before"}
 
     @pytest.mark.asyncio
     async def test_merge_fills_null_fields(self):
         existing = MagicMock(spec=Transaction)
+        existing.id = "tx-2"
         existing.merchant_name = None
         existing.description = "Hello"
         existing.remark = None
@@ -130,12 +118,15 @@ class TestMerge:
             "external_source": "alipay",
         }
 
-        await _merge(mock_session := AsyncMock(), existing, rec)
+        diffs = await _merge(mock_session := AsyncMock(), existing, rec)
+        # Blanks should be filled
         assert existing.merchant_name == "New Merchant"
         assert existing.description == "Hello"
         assert existing.remark == "New remark"
         assert existing.external_tx_id == "new-ext"
         assert existing.external_source == "alipay"
+        # No diffs since old was None for enriched fields (no overwrite conflict)
+        assert diffs == []
 
 
 class TestUpsertTransactions:
@@ -160,6 +151,7 @@ class TestUpsertTransactions:
         with patch("app.services.merge_engine._find_match", new_callable=AsyncMock) as mock_find, \
              patch("app.services.merge_engine._merge", new_callable=AsyncMock) as mock_merge:
             mock_find.return_value = MagicMock(spec=Transaction)
+            mock_merge.return_value = []
             records = [
                 {"type": "expense", "original_amount": Decimal("10.00"), "base_amount": Decimal("10.00"),
                  "account_id": str(uuid.uuid4()), "transaction_date": datetime.now()},
@@ -169,4 +161,5 @@ class TestUpsertTransactions:
             result = await upsert_transactions(mock_session, "user-1", records)
             assert result["created"] == 0
             assert result["updated"] == 2
+            assert result["diffs"] == []
             mock_session.add.assert_not_called()

@@ -118,6 +118,18 @@ async def recalculate_balance(
         )
     )
     total_delta = delta_result.scalar() or Decimal("0")
+
+    # Also count incoming transfers (where this account is the destination)
+    incoming_result = await db.execute(
+        select(func.sum(Transaction.base_amount)).where(
+            Transaction.transfer_account_id == account_id,
+            Transaction.type == TransactionType.TRANSFER,
+            Transaction.user_id == user_id,
+        )
+    )
+    incoming_delta = incoming_result.scalar() or Decimal("0")
+    total_delta += incoming_delta
+
     account.current_balance = account.initial_balance + total_delta
     await db.commit()
     await db.refresh(account)
@@ -178,16 +190,38 @@ async def get_account_transactions(
         .where(Transaction.account_id == account_id, Transaction.user_id == user_id)
         .order_by(Transaction.transaction_date.desc())
     )
-    transactions = txn_result.scalars().all()
+    transactions = list(txn_result.scalars().all())
+
+    # Include incoming transfers (where this account is the destination)
+    incoming_result = await db.execute(
+        select(Transaction)
+        .where(
+            Transaction.transfer_account_id == account_id,
+            Transaction.type == TransactionType.TRANSFER,
+            Transaction.user_id == user_id,
+        )
+        .order_by(Transaction.transaction_date.desc())
+    )
+    incoming_transfers = incoming_result.scalars().all()
+
+    # Merge and sort by date desc
+    all_txns = sorted(
+        transactions + list(incoming_transfers),
+        key=lambda t: t.transaction_date,
+        reverse=True,
+    )
 
     running = account.current_balance
     txns_with_balance = []
-    for tx in transactions:
+    for tx in all_txns:
         balance_before = running
+        is_incoming = tx.transfer_account_id == account_id and tx.type == TransactionType.TRANSFER
         if tx.type == TransactionType.EXPENSE:
             running += tx.base_amount
-        elif tx.type == TransactionType.TRANSFER:
+        elif tx.type == TransactionType.TRANSFER and not is_incoming:
             running += tx.base_amount
+        elif is_incoming:
+            running -= tx.base_amount
         elif tx.type in (TransactionType.INCOME, TransactionType.REFUND, TransactionType.BALANCE_ADJUSTMENT):
             running -= tx.base_amount
         running_at_tx = balance_before

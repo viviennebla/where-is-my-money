@@ -61,4 +61,4 @@ class Transaction(Base):
     )
     transfer_account = relationship("Account", foreign_keys=[transfer_account_id])
     parent = relationship("Transaction", remote_side=[id], backref="refunds")
-    tags = relationship("TransactionTag", back_populates="transaction", lazy="dynamic")
+    tags = relationship("TransactionTag", back_populates="transaction", lazy="selectin")

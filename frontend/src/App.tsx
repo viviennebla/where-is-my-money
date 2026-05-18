@@ -9,6 +9,8 @@ import AccountsPage from './pages/AccountsPage'
 import AccountDetailPage from './pages/AccountDetailPage'
 import ImportPage from './pages/ImportPage'
 import SettingsPage from './pages/SettingsPage'
+import TagsPage from './pages/TagsPage'
+import TagRulesPage from './pages/TagRulesPage'
 import AppShell from './components/layout/AppShell'
 import ErrorBoundary from './components/layout/ErrorBoundary'
 
@@ -47,6 +49,8 @@ function App() {
           <Route path="/accounts/:id" element={<AccountDetailPage />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/tags" element={<TagsPage />} />
+          <Route path="/tag-rules" element={<TagRulesPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppShell>

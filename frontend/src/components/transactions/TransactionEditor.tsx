@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
-import { Transaction, Account } from '../../lib/types'
+import { Transaction, Account, Tag } from '../../lib/types'
 import { TX_TYPE_LABELS } from '../../lib/constants'
 
 interface Props {
@@ -21,6 +21,7 @@ export default function TransactionEditor({ open, tx, onClose }: Props) {
   const [accountId, setAccountId] = useState('')
   const [transferAccountId, setTransferAccountId] = useState('')
   const [saving, setSaving] = useState(false)
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set())
 
   // Refund fields
   const [refundAmount, setRefundAmount] = useState('')
@@ -29,6 +30,12 @@ export default function TransactionEditor({ open, tx, onClose }: Props) {
   const { data: accounts } = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn: () => api.get('/accounts').then((r) => r.data),
+    enabled: open,
+  })
+
+  const { data: tags } = useQuery<Tag[]>({
+    queryKey: ['tags'],
+    queryFn: () => api.get('/tags').then((r) => r.data),
     enabled: open,
   })
 
@@ -42,6 +49,7 @@ export default function TransactionEditor({ open, tx, onClose }: Props) {
       setTxDate(tx.transaction_date ? tx.transaction_date.slice(0, 16) : '')
       setAccountId(tx.account_id)
       setTransferAccountId(tx.transfer_account_id || '')
+      setSelectedTagIds(new Set((tx.tags || []).map((t) => t.id)))
       setRefundAmount('')
       setRefundDate('')
     }
@@ -61,10 +69,12 @@ export default function TransactionEditor({ open, tx, onClose }: Props) {
         transaction_date: txDate ? new Date(txDate).toISOString() : undefined,
         account_id: accountId || undefined,
         transfer_account_id: type === 'transfer' ? (transferAccountId || undefined) : undefined,
+        tag_ids: [...selectedTagIds],
       })
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['account-transactions'] })
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['tags'] })
       onClose()
     } finally {
       setSaving(false)
@@ -177,6 +187,31 @@ export default function TransactionEditor({ open, tx, onClose }: Props) {
               onChange={(e) => setRemark(e.target.value)}
               placeholder="备注"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">标签</label>
+            <div className="flex flex-wrap gap-2">
+              {tags?.map((tag) => (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => {
+                    const next = new Set(selectedTagIds)
+                    if (next.has(tag.id)) next.delete(tag.id)
+                    else next.add(tag.id)
+                    setSelectedTagIds(next)
+                  }}
+                  className={`px-3 py-1 rounded-full text-sm transition ${
+                    selectedTagIds.has(tag.id)
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {tag.emoji} {tag.name}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Refund section for expenses */}
