@@ -2,9 +2,9 @@ import { CalendarDay } from '../../lib/types'
 
 function Skeleton() {
   return (
-    <div className="grid grid-cols-7 gap-1 animate-pulse">
+    <div className="grid grid-cols-7 gap-0.5 animate-pulse">
       {Array.from({ length: 35 }).map((_, i) => (
-        <div key={i} className="aspect-square bg-gray-100 rounded-lg" />
+        <div key={i} className="h-7 bg-gray-100 rounded" />
       ))}
     </div>
   )
@@ -24,7 +24,7 @@ export default function CalendarView({
   onSelectDate: (date: string | null) => void
 }) {
   if (isLoading) return <Skeleton />
-  if (error) return <div className="text-sm text-red-600">加载失败：{error.message}</div>
+  if (error) return <div className="text-[10px] text-red-600">加载失败：{error.message}</div>
 
   const dayMap = new Map<string, CalendarDay>()
   if (data) {
@@ -57,14 +57,14 @@ export default function CalendarView({
 
   return (
     <div>
-      <div className="grid grid-cols-7 gap-1 mb-1">
+      <div className="grid grid-cols-7 gap-0.5 mb-0.5">
         {DAY_NAMES.map((n) => (
-          <div key={n} className="text-center text-xs text-gray-400 py-1">{n}</div>
+          <div key={n} className="text-center text-[10px] text-gray-400">{n}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-0.5">
         {cells.map((day, i) => {
-          if (day === null) return <div key={`empty-${i}`} className="aspect-square" />
+          if (day === null) return <div key={`empty-${i}`} className="h-7" />
 
           const dateStr = `${year}-${monthStr}-${pad(day)}`
           const entry = dayMap.get(dateStr)
@@ -75,16 +75,16 @@ export default function CalendarView({
             <button
               key={dateStr}
               onClick={() => onSelectDate(isSelected ? null : dateStr)}
-              className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs transition ${
+              className={`h-7 rounded flex flex-col items-center justify-center text-[10px] leading-tight transition ${
                 isSelected
-                  ? 'ring-2 ring-blue-500 bg-blue-50'
+                  ? 'ring-1 ring-blue-500 bg-blue-50'
                   : `${bgIntensity(expense)} hover:bg-gray-200`
               }`}
             >
-              <span className={`font-medium ${isSelected ? 'text-blue-700' : 'text-gray-700'}`}>{day}</span>
+              <span className={`font-medium ${isSelected ? 'text-blue-700' : 'text-gray-600'}`}>{day}</span>
               {expense > 0 && (
-                <span className={`text-[10px] ${isSelected ? 'text-blue-500' : 'text-red-500'}`}>
-                  ¥{Math.round(expense)}
+                <span className={`text-[8px] leading-none ${isSelected ? 'text-blue-500' : 'text-red-400'}`}>
+                  {Math.round(expense)}
                 </span>
               )}
             </button>
@@ -92,12 +92,12 @@ export default function CalendarView({
         })}
       </div>
       {selectedDate && (
-        <div className="mt-2 text-center">
+        <div className="mt-1 text-center">
           <button
             onClick={() => onSelectDate(null)}
-            className="text-xs text-blue-600 hover:underline"
+            className="text-[10px] text-blue-600 hover:underline"
           >
-            清除日期筛选
+            清除
           </button>
         </div>
       )}

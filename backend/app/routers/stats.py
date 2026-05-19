@@ -132,12 +132,19 @@ async def get_trend(
     year: int | None = Query(default=None),
     month: int | None = Query(default=None),
     months: int = Query(default=12, ge=1, le=60),
+    date_from: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    quarter: int | None = Query(default=None, ge=1, le=4),
 ):
     if granularity == "day":
-        if year is None or month is None:
-            year, month = THIS_YEAR, THIS_MONTH
         period_expr = func.strftime("%Y-%m-%d", Transaction.transaction_date)
-        filter_expr = (extract("year", Transaction.transaction_date) == year) & (extract("month", Transaction.transaction_date) == month)
+        if date_from and date_to:
+            filter_expr = (Transaction.transaction_date >= date_from) & (Transaction.transaction_date <= date_to)
+        elif year is not None and month is not None:
+            filter_expr = (extract("year", Transaction.transaction_date) == year) & (extract("month", Transaction.transaction_date) == month)
+        else:
+            year, month = THIS_YEAR, THIS_MONTH
+            filter_expr = (extract("year", Transaction.transaction_date) == year) & (extract("month", Transaction.transaction_date) == month)
         order_expr = period_expr
     elif granularity == "week":
         if year is None:
@@ -150,8 +157,20 @@ async def get_trend(
     elif granularity == "quarter":
         if year is None:
             year = THIS_YEAR
-        period_expr = func.strftime("%Y", Transaction.transaction_date) + "-Q" + sa_cast((sa_cast(func.strftime("%m", Transaction.transaction_date), Integer) + 2) / 3, String)
-        filter_expr = extract("year", Transaction.transaction_date) == year
+        if quarter is not None:
+            # Group by month within the specified quarter
+            period_expr = func.strftime("%Y-%m", Transaction.transaction_date)
+            start_month = (quarter - 1) * 3 + 1
+            end_month = start_month + 2
+            filter_expr = (
+                (extract("year", Transaction.transaction_date) == year) &
+                (extract("month", Transaction.transaction_date) >= start_month) &
+                (extract("month", Transaction.transaction_date) <= end_month)
+            )
+        else:
+            # Group by quarter for the whole year
+            period_expr = func.strftime("%Y", Transaction.transaction_date) + "-Q" + sa_cast((sa_cast(func.strftime("%m", Transaction.transaction_date), Integer) + 2) / 3, String)
+            filter_expr = extract("year", Transaction.transaction_date) == year
         order_expr = period_expr
     elif granularity == "year":
         period_expr = func.strftime("%Y", Transaction.transaction_date)
@@ -159,7 +178,10 @@ async def get_trend(
         order_expr = period_expr
     else:  # month
         period_expr = func.strftime("%Y-%m", Transaction.transaction_date)
-        filter_expr = True
+        if year is not None:
+            filter_expr = extract("year", Transaction.transaction_date) == year
+        else:
+            filter_expr = True
         order_expr = period_expr
 
     query = (
@@ -180,7 +202,7 @@ async def get_trend(
     result = await db.execute(query)
     rows = result.all()
 
-    if granularity == "month" and len(rows) > months:
+    if granularity == "month" and year is None and len(rows) > months:
         rows = rows[-months:]
 
     return [
@@ -229,6 +251,8 @@ async def get_category_breakdown(
     year: int | None = Query(default=None),
     month: int | None = Query(default=None),
     type: str = Query(default="expense", pattern="^(expense|income)$"),
+    date_from: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
 ):
     tx_type = TransactionType.EXPENSE if type == "expense" else TransactionType.INCOME
     refund_type = TransactionType.REFUND
@@ -253,10 +277,13 @@ async def get_category_breakdown(
         )
     )
 
-    if year is not None:
-        query = query.where(extract("year", Transaction.transaction_date) == year)
-    if month is not None:
-        query = query.where(extract("month", Transaction.transaction_date) == month)
+    if date_from and date_to:
+        query = query.where(Transaction.transaction_date >= date_from, Transaction.transaction_date <= date_to)
+    else:
+        if year is not None:
+            query = query.where(extract("year", Transaction.transaction_date) == year)
+        if month is not None:
+            query = query.where(extract("month", Transaction.transaction_date) == month)
 
     query = query.group_by(Transaction.source_category).order_by(func.sum(Transaction.base_amount).desc())
 
@@ -283,6 +310,8 @@ async def get_merchant_ranking(
     year: int | None = Query(default=None),
     month: int | None = Query(default=None),
     limit: int = Query(default=10, ge=1, le=50),
+    date_from: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
 ):
     query = (
         select(
@@ -298,10 +327,13 @@ async def get_merchant_ranking(
         )
     )
 
-    if year is not None:
-        query = query.where(extract("year", Transaction.transaction_date) == year)
-    if month is not None:
-        query = query.where(extract("month", Transaction.transaction_date) == month)
+    if date_from and date_to:
+        query = query.where(Transaction.transaction_date >= date_from, Transaction.transaction_date <= date_to)
+    else:
+        if year is not None:
+            query = query.where(extract("year", Transaction.transaction_date) == year)
+        if month is not None:
+            query = query.where(extract("month", Transaction.transaction_date) == month)
 
     query = query.group_by(Transaction.merchant_name).order_by(func.sum(Transaction.base_amount).desc()).limit(limit)
 
