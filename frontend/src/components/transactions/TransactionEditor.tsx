@@ -74,6 +74,7 @@ export default function TransactionEditor({ open, tx, onClose }: Props) {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['account-transactions'] })
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
       queryClient.invalidateQueries({ queryKey: ['tags'] })
       onClose()
     } finally {
@@ -100,6 +101,7 @@ export default function TransactionEditor({ open, tx, onClose }: Props) {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['account-transactions'] })
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
       onClose()
     } finally {
       setSaving(false)

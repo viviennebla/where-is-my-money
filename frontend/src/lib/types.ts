@@ -79,6 +79,7 @@ export interface StatSummary {
   income: string
   net: string
   tx_count: number
+  total_assets: string
 }
 
 export interface MonthlyTrendItem {
@@ -86,6 +87,19 @@ export interface MonthlyTrendItem {
   month: number
   expense: string
   income: string
+}
+
+export interface TrendItem {
+  period: string
+  expense: string
+  income: string
+}
+
+export interface CalendarDay {
+  date: string
+  expense: string
+  income: string
+  count: number
 }
 
 export interface CategoryItem {

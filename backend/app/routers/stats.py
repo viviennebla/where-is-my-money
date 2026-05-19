@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func, case, extract
+from sqlalchemy import select, func, case, extract, Integer, String, cast as sa_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -9,8 +9,8 @@ from app.auth import get_current_user
 from app.models.transaction import Transaction, TransactionType
 from app.models.account import Account
 from app.schemas.stats import (
-    StatSummary, MonthlyTrendItem, CategoryItem,
-    MerchantItem, AccountBalanceItem,
+    StatSummary, MonthlyTrendItem, TrendItem, CalendarDay,
+    CategoryItem, MerchantItem, AccountBalanceItem,
 )
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
@@ -51,7 +51,15 @@ async def get_summary(
     net = income - expense
     tx_count = row[2]
 
-    return StatSummary(expense=expense, income=income, net=net, tx_count=tx_count)
+    assets_result = await db.execute(
+        select(func.sum(Account.current_balance)).where(
+            Account.user_id == user_id,
+            Account.is_active == True,
+        )
+    )
+    total_assets = assets_result.scalar() or Decimal("0")
+
+    return StatSummary(expense=expense, income=income, net=net, tx_count=tx_count, total_assets=total_assets)
 
 
 @router.get("/monthly-trend", response_model=list[MonthlyTrendItem])
@@ -113,6 +121,104 @@ async def get_monthly_trend(
             income=row[3] or Decimal("0"),
         )
         for row in recent
+    ]
+
+
+@router.get("/trend", response_model=list[TrendItem])
+async def get_trend(
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    granularity: str = Query(default="month", pattern="^(day|week|month|quarter|year)$"),
+    year: int | None = Query(default=None),
+    month: int | None = Query(default=None),
+    months: int = Query(default=12, ge=1, le=60),
+):
+    if granularity == "day":
+        if year is None or month is None:
+            year, month = THIS_YEAR, THIS_MONTH
+        period_expr = func.strftime("%Y-%m-%d", Transaction.transaction_date)
+        filter_expr = (extract("year", Transaction.transaction_date) == year) & (extract("month", Transaction.transaction_date) == month)
+        order_expr = period_expr
+    elif granularity == "week":
+        if year is None:
+            year = THIS_YEAR
+        period_expr = func.strftime("%Y", Transaction.transaction_date) + "-W" + func.strftime("%W", Transaction.transaction_date)
+        filter_expr = extract("year", Transaction.transaction_date) == year
+        if month is not None:
+            filter_expr = filter_expr & (extract("month", Transaction.transaction_date) == month)
+        order_expr = period_expr
+    elif granularity == "quarter":
+        if year is None:
+            year = THIS_YEAR
+        period_expr = func.strftime("%Y", Transaction.transaction_date) + "-Q" + sa_cast((sa_cast(func.strftime("%m", Transaction.transaction_date), Integer) + 2) / 3, String)
+        filter_expr = extract("year", Transaction.transaction_date) == year
+        order_expr = period_expr
+    elif granularity == "year":
+        period_expr = func.strftime("%Y", Transaction.transaction_date)
+        filter_expr = True
+        order_expr = period_expr
+    else:  # month
+        period_expr = func.strftime("%Y-%m", Transaction.transaction_date)
+        filter_expr = True
+        order_expr = period_expr
+
+    query = (
+        select(
+            period_expr.label("period"),
+            func.sum(case((Transaction.type == TransactionType.EXPENSE, Transaction.base_amount), else_=0)).label("expense"),
+            func.sum(case(
+                (Transaction.type == TransactionType.INCOME, Transaction.base_amount),
+                (Transaction.type == TransactionType.REFUND, Transaction.base_amount),
+                else_=0,
+            )).label("income"),
+        )
+        .where(Transaction.user_id == user_id, filter_expr)
+        .group_by("period")
+        .order_by(order_expr)
+    )
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    if granularity == "month" and len(rows) > months:
+        rows = rows[-months:]
+
+    return [
+        TrendItem(period=row[0], expense=row[1] or Decimal("0"), income=row[2] or Decimal("0"))
+        for row in rows
+    ]
+
+
+@router.get("/calendar", response_model=list[CalendarDay])
+async def get_calendar(
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    year: int = Query(default=THIS_YEAR),
+    month: int = Query(default=THIS_MONTH),
+):
+    result = await db.execute(
+        select(
+            func.strftime("%Y-%m-%d", Transaction.transaction_date).label("d"),
+            func.sum(case((Transaction.type == TransactionType.EXPENSE, Transaction.base_amount), else_=0)).label("expense"),
+            func.sum(case(
+                (Transaction.type == TransactionType.INCOME, Transaction.base_amount),
+                (Transaction.type == TransactionType.REFUND, Transaction.base_amount),
+                else_=0,
+            )).label("income"),
+            func.count(),
+        )
+        .where(
+            Transaction.user_id == user_id,
+            extract("year", Transaction.transaction_date) == year,
+            extract("month", Transaction.transaction_date) == month,
+        )
+        .group_by("d")
+        .order_by("d")
+    )
+    rows = result.all()
+    return [
+        CalendarDay(date=row[0], expense=row[1] or Decimal("0"), income=row[2] or Decimal("0"), count=row[3])
+        for row in rows
     ]
 
 

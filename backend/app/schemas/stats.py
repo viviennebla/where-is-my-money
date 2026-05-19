@@ -7,6 +7,7 @@ class StatSummary(BaseModel):
     income: Decimal
     net: Decimal
     tx_count: int
+    total_assets: Decimal
 
 
 class MonthlyTrendItem(BaseModel):
@@ -14,6 +15,19 @@ class MonthlyTrendItem(BaseModel):
     month: int
     expense: Decimal
     income: Decimal
+
+
+class TrendItem(BaseModel):
+    period: str
+    expense: Decimal
+    income: Decimal
+
+
+class CalendarDay(BaseModel):
+    date: str
+    expense: Decimal
+    income: Decimal
+    count: int
 
 
 class CategoryItem(BaseModel):

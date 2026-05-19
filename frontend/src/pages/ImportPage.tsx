@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import FileUploader from '../components/import/FileUploader'
 import AIParseView from '../components/import/AIParseView'
@@ -23,6 +24,16 @@ export default function ImportPage() {
   const [accountBindings, setAccountBindings] = useState<Record<string, string> | null>(null)
   const [result, setResult] = useState<ImportResult | null>(null)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    if (step === 'done') {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['account-transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
+    }
+  }, [step, queryClient])
 
   const stepLabels = ['上传文件', 'AI解析', '账户绑定', '执行导入', '完成']
   const stepOrder: Step[] = ['upload', 'parse', 'bind-accounts', 'execute', 'done']

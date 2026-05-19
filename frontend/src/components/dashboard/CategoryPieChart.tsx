@@ -22,10 +22,26 @@ export default function CategoryPieChart({ data, title, isLoading, error }: {
     <div className="h-64 flex items-center justify-center text-sm text-gray-400">暂无类别数据</div>
   )
 
-  const chartData = data.map((d) => ({
-    name: d.category || '未分类',
-    value: parseFloat(d.amount),
-  }))
+  const total = data.reduce((s, d) => s + parseFloat(d.amount), 0)
+
+  // Merge items < 5% into "其他", merge 退款 into income/expense
+  const threshold = total * 0.05
+  const main: { name: string; value: number }[] = []
+  let otherValue = 0
+  for (const d of data) {
+    const v = parseFloat(d.amount)
+    const name = d.category || '未分类'
+    if (name.includes('退款')) {
+      otherValue += v
+    } else if (v < threshold || main.length >= 8) {
+      otherValue += v
+    } else {
+      main.push({ name, value: v })
+    }
+  }
+  if (otherValue > 0) {
+    main.push({ name: '其他', value: otherValue })
+  }
 
   return (
     <div>
@@ -33,7 +49,7 @@ export default function CategoryPieChart({ data, title, isLoading, error }: {
       <ResponsiveContainer width="100%" height={220}>
         <PieChart>
           <Pie
-            data={chartData}
+            data={main}
             cx="50%"
             cy="50%"
             innerRadius={45}
@@ -41,7 +57,7 @@ export default function CategoryPieChart({ data, title, isLoading, error }: {
             paddingAngle={2}
             dataKey="value"
           >
-            {chartData.map((_, i) => (
+            {main.map((_, i) => (
               <Cell key={i} fill={COLORS[i % COLORS.length]} />
             ))}
           </Pie>
