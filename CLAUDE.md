@@ -5,13 +5,14 @@
 - **Runtime**: Alpine Linux container in WSL2, Docker daemon on Windows host
 - **Docker socket**: `/var/run/docker.sock` (connects to Windows Docker)
 - **Host mapping**: `D:\work` → `/workspace` (9p mount)
-- **Tools need install each session**: `apk add docker-cli docker-cli-compose git`
+- **Tools need install each session**: `apk add docker-cli docker-cli-compose git openssh-client`
 - **GitHub**: repo `viviennebla/where-is-my-money`, user `viviennebla` (email `1569787845@qq.com`)
 - **SSH keys**: stored at `/workspace/.ssh/id_ed25519` (persisted on Windows host, not in repo)
 - **Git+SSH setup each session**:
   ```sh
-  apk add git
+  apk add git openssh-client
   mkdir -p ~/.ssh && cp /workspace/.ssh/id_ed25519* ~/.ssh/ && chmod 600 ~/.ssh/id_ed25519
+  ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
   git config --global user.email "1569787845@qq.com"
   git config --global user.name "viviennebla"
   ```

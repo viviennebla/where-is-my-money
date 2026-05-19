@@ -15,13 +15,13 @@ export default function Navbar() {
 
   return (
     <nav className="bg-slate-800 text-white">
-      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link to="/" className="text-lg font-bold tracking-tight">
             WIMM
           </Link>
           <Link to="/" className={linkClass('/')}>
-            流水
+            看板
           </Link>
           <Link to="/accounts" className={linkClass('/accounts')}>
             账户

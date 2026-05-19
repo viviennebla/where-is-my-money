@@ -82,7 +82,9 @@
       "Bash(cp /workspace/.ssh/id_ed25519* ~/.ssh/)",
       "Bash(chmod 600 ~/.ssh/id_ed25519)",
       "Bash(git config *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(ssh-keyscan github.com)",
+      "Bash(docker restart *)"
     ]
   }
 }

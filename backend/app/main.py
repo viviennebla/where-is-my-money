@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database import engine, Base
-from app.routers import auth, accounts, tags, tag_rules, transactions, import_pipeline, settings, tasks
+from app.routers import auth, accounts, tags, tag_rules, transactions, import_pipeline, settings, tasks, stats
 import app.models  # noqa: F401 — ensure all models are registered on Base.metadata
 
 
@@ -60,6 +60,7 @@ app.include_router(transactions.router)
 app.include_router(import_pipeline.router)
 app.include_router(settings.router)
 app.include_router(tasks.router)
+app.include_router(stats.router)
 
 
 @app.get("/api/health")

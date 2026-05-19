@@ -73,3 +73,38 @@ export interface ImportTemplate {
   created_at: string
   updated_at: string
 }
+
+export interface StatSummary {
+  expense: string
+  income: string
+  net: string
+  tx_count: number
+}
+
+export interface MonthlyTrendItem {
+  year: number
+  month: number
+  expense: string
+  income: string
+}
+
+export interface CategoryItem {
+  category: string
+  amount: string
+  count: number
+  pct: number
+}
+
+export interface MerchantItem {
+  merchant: string
+  amount: string
+  count: number
+}
+
+export interface AccountBalanceItem {
+  id: string
+  name: string
+  current_balance: string
+  account_type: string
+  currency: string
+}

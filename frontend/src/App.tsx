@@ -42,18 +42,44 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/accounts" element={<AccountsPage />} />
-          <Route path="/accounts/:id" element={<AccountDetailPage />} />
-          <Route path="/import" element={<ImportPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/tags" element={<TagsPage />} />
-          <Route path="/tag-rules" element={<TagRulesPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AppShell>
+      <Routes>
+        <Route path="/" element={
+          <AppShell containerClass="max-w-6xl">
+            <DashboardPage />
+          </AppShell>
+        } />
+        <Route path="/accounts" element={
+          <AppShell>
+            <AccountsPage />
+          </AppShell>
+        } />
+        <Route path="/accounts/:id" element={
+          <AppShell>
+            <AccountDetailPage />
+          </AppShell>
+        } />
+        <Route path="/import" element={
+          <AppShell>
+            <ImportPage />
+          </AppShell>
+        } />
+        <Route path="/settings" element={
+          <AppShell>
+            <SettingsPage />
+          </AppShell>
+        } />
+        <Route path="/tags" element={
+          <AppShell>
+            <TagsPage />
+          </AppShell>
+        } />
+        <Route path="/tag-rules" element={
+          <AppShell>
+            <TagRulesPage />
+          </AppShell>
+        } />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </ErrorBoundary>
   )
 }
